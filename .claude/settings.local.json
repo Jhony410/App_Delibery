@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(flutter devices *)",
+      "Bash(where flutter *)",
+      "Bash(flutter pub *)",
+      "Bash(flutter analyze *)"
+    ]
+  }
+}
