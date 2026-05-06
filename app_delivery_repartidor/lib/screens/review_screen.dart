@@ -1,10 +1,38 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
 import '../widgets.dart';
 
-class ReviewScreen extends StatelessWidget {
+class ReviewScreen extends StatefulWidget {
   const ReviewScreen({super.key});
+
+  @override
+  State<ReviewScreen> createState() => _ReviewScreenState();
+}
+
+class _ReviewScreenState extends State<ReviewScreen> {
+  int _seconds = 10;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return;
+      setState(() => _seconds--);
+      if (_seconds <= 0) {
+        t.cancel();
+        Navigator.of(context).pushReplacementNamed('/home');
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +54,7 @@ class ReviewScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       const SizedBox(height: 16),
-                      _ReviewBadge(),
+                      _ReviewBadge(seconds: _seconds),
                       const SizedBox(height: 32),
                       const Text(
                         'Tu cuenta está\nen revisión',
@@ -90,6 +118,16 @@ class ReviewScreen extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   CButton(
+                    label: 'Entrar ahora ($_seconds s)',
+                    icon: Icons.arrow_forward_rounded,
+                    variant: CButtonVariant.primary,
+                    onPressed: () {
+                      _timer?.cancel();
+                      Navigator.of(context).pushReplacementNamed('/home');
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  CButton(
                     label: 'Contactar soporte',
                     icon: Icons.help_outline,
                     variant: CButtonVariant.ghost,
@@ -100,6 +138,7 @@ class ReviewScreen extends StatelessWidget {
                     label: 'Cerrar sesión',
                     variant: CButtonVariant.surface,
                     onPressed: () async {
+                      _timer?.cancel();
                       await AuthService.signOut();
                       if (context.mounted) {
                         Navigator.of(context).pushNamedAndRemoveUntil(
@@ -120,6 +159,9 @@ class ReviewScreen extends StatelessWidget {
 }
 
 class _ReviewBadge extends StatelessWidget {
+  final int seconds;
+  const _ReviewBadge({required this.seconds});
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -145,10 +187,15 @@ class _ReviewBadge extends StatelessWidget {
               color: CourierColors.surface,
               border: Border.all(color: CourierColors.warning, width: 3),
             ),
-            child: const Icon(
-              Icons.access_time_rounded,
-              size: 64,
-              color: CourierColors.warning,
+            child: Center(
+              child: Text(
+                '$seconds',
+                style: const TextStyle(
+                  fontSize: 52,
+                  fontWeight: FontWeight.w800,
+                  color: CourierColors.warning,
+                ),
+              ),
             ),
           ),
         ],

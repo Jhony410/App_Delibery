@@ -29,8 +29,6 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
     if (courier == null) {
       Navigator.of(context).pushReplacementNamed('/login');
-    } else if (courier.status == 'pending_review') {
-      Navigator.of(context).pushReplacementNamed('/review');
     } else {
       Navigator.of(context).pushReplacementNamed('/home');
     }
