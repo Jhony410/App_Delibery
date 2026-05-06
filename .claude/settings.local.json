@@ -8,7 +8,11 @@
       "Bash(Get-ChildItem -Path \"D:\\\\Aplicacion Delibery Puno\")",
       "Bash(Select-Object Name, PSIsContainer)",
       "Bash(Sort-Object Name)",
-      "PowerShell(Get-ChildItem *)"
+      "PowerShell(Get-ChildItem *)",
+      "Bash(ls \"D:\\\\Aplicacion Delibery Puno\\\\app_delivery_administrator\")",
+      "Bash(ls \"D:\\\\Aplication Delibery-handoff-administrator\")",
+      "Bash(ls \"D:\\\\Aplicacion Delibery Puno\\\\app_delivery_repartidor\\\\lib\\\\services\")",
+      "Bash(ls \"D:\\\\Aplicacion Delibery Puno\\\\app_delivery_repartidor\\\\lib\\\\models\")"
     ]
   }
 }
