@@ -4,6 +4,7 @@ class AdminRoutes {
 
   static const splash = '/';
   static const login = '/login';
+  static const setup = '/setup';
   static const dashboard = '/dashboard';
   static const orders = '/orders';
   static const orderDetail = '/orders/detail';

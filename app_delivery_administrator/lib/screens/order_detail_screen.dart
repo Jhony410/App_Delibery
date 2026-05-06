@@ -554,7 +554,7 @@ class _CourierMarker extends StatelessWidget {
         border: Border.all(color: Colors.white, width: 3),
         boxShadow: [
           BoxShadow(
-            color: AdminColors.primary.withOpacity(0.4),
+            color: AdminColors.primary.withValues(alpha: 0.4),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),

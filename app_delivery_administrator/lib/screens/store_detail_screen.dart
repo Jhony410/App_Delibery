@@ -297,7 +297,8 @@ class _SalesBarCard extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: i == _bars.length - 1
                               ? AdminColors.primary
-                              : AdminColors.primary.withOpacity(0.6),
+                              : AdminColors.primary
+                                  .withValues(alpha: 0.6),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),

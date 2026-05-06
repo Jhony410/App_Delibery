@@ -19,13 +19,6 @@ class OrdersScreen extends StatefulWidget {
 class _OrdersScreenState extends State<OrdersScreen> {
   final _search = TextEditingController();
   int _filter = 0;
-  static const _filters = [
-    'Todos',
-    'Activos',
-    'Buscando rep.',
-    'Entregados',
-    'Cancelados',
-  ];
 
   @override
   void dispose() {
@@ -230,11 +223,12 @@ class _OrdersTable extends StatelessWidget {
                     _PageBtn(child: const Icon(Icons.chevron_left, size: 14)),
                     for (final p in const ['1', '2', '3', '…', '125'])
                       _PageBtn(
-                          child: Text(p,
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600)),
-                          active: p == '1'),
+                        active: p == '1',
+                        child: Text(p,
+                            style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600)),
+                      ),
                     _PageBtn(child: const Icon(Icons.chevron_right, size: 14)),
                   ],
                 ),

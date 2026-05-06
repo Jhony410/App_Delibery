@@ -12,7 +12,8 @@
       "Bash(ls \"D:\\\\Aplicacion Delibery Puno\\\\app_delivery_administrator\")",
       "Bash(ls \"D:\\\\Aplication Delibery-handoff-administrator\")",
       "Bash(ls \"D:\\\\Aplicacion Delibery Puno\\\\app_delivery_repartidor\\\\lib\\\\services\")",
-      "Bash(ls \"D:\\\\Aplicacion Delibery Puno\\\\app_delivery_repartidor\\\\lib\\\\models\")"
+      "Bash(ls \"D:\\\\Aplicacion Delibery Puno\\\\app_delivery_repartidor\\\\lib\\\\models\")",
+      "Bash(flutter build *)"
     ]
   }
 }

@@ -45,7 +45,7 @@ class OrderService {
       'status': 'cancelado',
       'cancelledAt': FieldValue.serverTimestamp(),
       'cancelledBy': 'admin',
-      if (reason != null) 'cancelReason': reason,
+      'cancelReason': ?reason,
     });
   }
 

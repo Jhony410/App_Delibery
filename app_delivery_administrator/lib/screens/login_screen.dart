@@ -222,6 +222,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: TextButton(
+                      onPressed: () => Navigator.pushNamed(
+                          context, '/setup'),
+                      child: Text('¿Primera vez? Crear cuenta admin',
+                          style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              color: AdminColors.textMuted,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -245,7 +257,8 @@ class _LoginScreenState extends State<LoginScreen> {
 class _DotsPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = const Color(0xFFD4D4D8).withOpacity(0.5);
+    final paint = Paint()
+      ..color = const Color(0xFFD4D4D8).withValues(alpha: 0.5);
     const step = 32.0;
     for (double y = 2; y < size.height; y += step) {
       for (double x = 2; x < size.width; x += step) {

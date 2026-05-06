@@ -270,12 +270,12 @@ class _SalesChartPainter extends CustomPainter {
     areaPath.lineTo(0, h);
     areaPath.close();
     final gradient = Paint()
-      ..shader = const LinearGradient(
+      ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          Color(0x40FF6B35),
-          Color(0x00FF6B35),
+          AdminColors.primary.withValues(alpha: 0.25),
+          AdminColors.primary.withValues(alpha: 0),
         ],
       ).createShader(Rect.fromLTWH(0, 0, w, h));
     canvas.drawPath(areaPath, gradient);
@@ -299,8 +299,8 @@ class _SalesChartPainter extends CustomPainter {
     for (int i = 0; i < points.length; i++) {
       final p = points[i];
       if (i == points.length - 1) {
-        canvas.drawCircle(
-            p, 11, Paint()..color = AdminColors.primary.withOpacity(0.2));
+        canvas.drawCircle(p, 11,
+            Paint()..color = AdminColors.primary.withValues(alpha: 0.2));
         canvas.drawCircle(p, 6, Paint()..color = AdminColors.primary);
       } else {
         canvas.drawCircle(p, 3.5, Paint()..color = Colors.white);
