@@ -64,7 +64,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
       );
       final orderId = await DbService.createOrder(order);
       CartService.clear();
-      _runSimulation(orderId);
       if (mounted) {
         Navigator.pushNamed(context, '/confirmed', arguments: orderId);
       }
@@ -78,17 +77,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  void _runSimulation(String orderId) {
-    Future(() async {
-      await Future.delayed(const Duration(seconds: 6));
-      await DbService.updateOrderStatus(orderId, 'preparing');
-      await Future.delayed(const Duration(seconds: 10));
-      await DbService.updateOrderStatus(orderId, 'en_camino');
-      await Future.delayed(const Duration(seconds: 14));
-      await DbService.updateOrderStatus(orderId, 'entregado');
-    });
   }
 
   @override

@@ -5,12 +5,17 @@ class OrderService {
   static final _db = FirebaseFirestore.instance;
 
   /// Orders awaiting a courier — store has finished preparing.
+  /// Filters `courierId == null` client-side so it matches both explicit-null
+  /// and legacy docs that omit the field entirely (Firestore `isNull: true`
+  /// only matches the explicit case).
   static Stream<List<OrderModel>> streamAvailable() => _db
       .collection('orders')
       .where('status', whereIn: ['confirmed', 'preparing'])
-      .where('courierId', isNull: true)
       .snapshots()
-      .map((s) => s.docs.map((d) => OrderModel.fromMap(d.id, d.data())).toList());
+      .map((s) => s.docs
+          .map((d) => OrderModel.fromMap(d.id, d.data()))
+          .where((o) => o.courierId == null)
+          .toList());
 
   /// All orders the courier has been assigned to.
   static Stream<List<OrderModel>> streamForCourier(String courierId) => _db

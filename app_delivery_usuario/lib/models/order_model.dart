@@ -94,6 +94,7 @@ class OrderModel {
         'deliveryFee': deliveryFee,
         'total': total,
         'status': status,
+        'courierId': null,
         'address': address,
         'paymentMethod': paymentMethod,
         if (observation != null && observation!.isNotEmpty)
