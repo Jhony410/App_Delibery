@@ -2,6 +2,9 @@
 
 > Sistema integral de delivery para la ciudad de Puno, compuesto por tres aplicaciones Flutter conectadas a un único backend Firebase.
 
+## 🎞️ Video Demo
+
+🔗 [Ver video en YouTube](https://www.youtube.com/watch?v=8FPL-2uPytY)
 ---
 
 ## 📖 Descripción
