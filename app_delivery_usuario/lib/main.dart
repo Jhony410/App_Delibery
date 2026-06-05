@@ -18,6 +18,7 @@ import 'screens/payment_screen.dart';
 import 'screens/confirmed_screen.dart';
 import 'screens/tracking_screen.dart';
 import 'screens/rating_screen.dart';
+import 'screens/chat_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -52,6 +53,7 @@ class DeliPunoApp extends StatelessWidget {
         '/confirmed': (ctx) => const ConfirmedScreen(),
         '/tracking': (ctx) => const TrackingScreen(),
         '/rating': (ctx) => const RatingScreen(),
+        '/chat': (ctx) => const ChatScreen(),
       },
     );
   }

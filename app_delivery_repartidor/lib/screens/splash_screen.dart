@@ -29,8 +29,12 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
     if (courier == null) {
       Navigator.of(context).pushReplacementNamed('/login');
-    } else {
+    } else if (courier.status == 'active') {
       Navigator.of(context).pushReplacementNamed('/home');
+    } else {
+      // pending_review / rejected / suspended → waiting room, which live-streams
+      // the status and advances on its own once the admin approves.
+      Navigator.of(context).pushReplacementNamed('/review');
     }
   }
 

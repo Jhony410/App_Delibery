@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import 'firebase_options.dart';
 import 'models/order_model.dart';
+import 'screens/chat_screen.dart';
 import 'screens/completed_screen.dart';
 import 'screens/deliver_screen.dart';
 import 'screens/login_screen.dart';
@@ -123,6 +124,12 @@ class RepartidorApp extends StatelessWidget {
         return MaterialPageRoute(
           settings: settings,
           builder: (_) => CompletedScreen(order: order),
+        );
+      case '/chat':
+        final order = settings.arguments as OrderModel;
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => ChatScreen(order: order),
         );
     }
     return null;

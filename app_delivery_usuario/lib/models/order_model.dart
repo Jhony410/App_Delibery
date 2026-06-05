@@ -46,6 +46,7 @@ class OrderModel {
   final String address;
   final String paymentMethod;
   final String? observation;
+  final String? courierId;
   final DateTime createdAt;
 
   const OrderModel({
@@ -62,6 +63,7 @@ class OrderModel {
     required this.address,
     required this.paymentMethod,
     this.observation,
+    this.courierId,
     required this.createdAt,
   });
 
@@ -81,6 +83,7 @@ class OrderModel {
         address: m['address'],
         paymentMethod: m['paymentMethod'],
         observation: m['observation'] as String?,
+        courierId: m['courierId'] as String?,
         createdAt: (m['createdAt'] as Timestamp).toDate(),
       );
 
@@ -94,7 +97,7 @@ class OrderModel {
         'deliveryFee': deliveryFee,
         'total': total,
         'status': status,
-        'courierId': null,
+        'courierId': courierId,
         'address': address,
         'paymentMethod': paymentMethod,
         if (observation != null && observation!.isNotEmpty)
@@ -102,11 +105,14 @@ class OrderModel {
         'createdAt': Timestamp.fromDate(createdAt),
       };
 
-  // pending | confirmed | preparing | en_camino | entregado | cancelado
+  // pending | confirmed | preparing | accepted | picked_up | en_camino
+  //         | entregado | cancelado
   String get statusLabel => switch (status) {
         'en_camino' => 'En camino',
         'entregado' => 'Entregado',
         'cancelado' => 'Cancelado',
+        'picked_up' => 'Recogido',
+        'accepted' => 'Repartidor asignado',
         'preparing' => 'Preparando',
         'confirmed' => 'Confirmado',
         _ => 'Pendiente',

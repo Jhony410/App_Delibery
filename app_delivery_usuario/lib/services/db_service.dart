@@ -108,6 +108,16 @@ class DbService {
   static Future<void> updateOrderStatus(String orderId, String status) =>
       _db.collection('orders').doc(orderId).update({'status': status});
 
+  // ── Couriers (read-only; owned by the courier app) ────────
+  /// Live view of the courier assigned to an order, so the tracking screen can
+  /// show the real driver instead of a placeholder. Returns null until a
+  /// courier accepts (order.courierId still null) or if the doc is missing.
+  static Stream<CourierInfo?> streamCourier(String courierId) => _db
+      .collection('couriers')
+      .doc(courierId)
+      .snapshots()
+      .map((d) => d.exists ? CourierInfo.fromMap(d.id, d.data()!) : null);
+
   // ── Users ─────────────────────────────────────────────────
   static Future<UserModel?> getUser(String uid) async {
     final doc = await _db.collection('users').doc(uid).get();
@@ -140,4 +150,44 @@ class DbService {
           .collection('addresses')
           .doc(addressId)
           .delete();
+}
+
+/// Read-only projection of a `couriers/{uid}` doc — only the fields the customer
+/// app needs to render the "your courier" card on the tracking screen.
+class CourierInfo {
+  final String uid;
+  final String name;
+  final String phone;
+  final String vehicleModel;
+  final String vehiclePlate;
+  final double rating;
+  final int totalDeliveries;
+
+  const CourierInfo({
+    required this.uid,
+    required this.name,
+    required this.phone,
+    required this.vehicleModel,
+    required this.vehiclePlate,
+    required this.rating,
+    required this.totalDeliveries,
+  });
+
+  factory CourierInfo.fromMap(String uid, Map<String, dynamic> m) => CourierInfo(
+        uid: uid,
+        name: m['name'] ?? '',
+        phone: m['phone'] ?? '',
+        vehicleModel: m['vehicleModel'] ?? '',
+        vehiclePlate: m['vehiclePlate'] ?? '',
+        rating: (m['rating'] as num?)?.toDouble() ?? 5.0,
+        totalDeliveries: m['totalDeliveries'] ?? 0,
+      );
+
+  String get initials {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return 'R';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
+  }
 }

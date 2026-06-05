@@ -19,6 +19,12 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _toggling = false;
   bool _newOrderShown = false;
 
+  /// Order IDs already surfaced to this courier during the current online
+  /// session. Prevents the popup from firing twice for the same order — e.g.
+  /// after a reject or timeout, when the order is still in `streamAvailable()`.
+  /// Reset only when the courier goes offline (see [_setOnline]).
+  final Set<String> _shownOrderIds = {};
+
   String? get _uid => AuthService.currentUid;
 
   @override
@@ -144,16 +150,22 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         if (_online)
           _AvailableOrdersListener(
-            uid: uid,
-            onPresent: () {
+            onOrder: (order) {
+              // Guard against showing the same order twice, and against
+              // stacking a second popup while one is already open.
               if (_newOrderShown) return;
+              if (_shownOrderIds.contains(order.id)) return;
               _newOrderShown = true;
-            },
-            onShow: (order) {
+              _shownOrderIds.add(order.id);
               Navigator.of(context).pushNamed(
                 '/new-order',
                 arguments: order,
-              ).then((_) => _newOrderShown = false);
+              ).then((result) {
+                _newOrderShown = false;
+                // Rechazar pops with the orderId — pin it so it's never
+                // re-offered to this courier this session.
+                if (result is String) _shownOrderIds.add(result);
+              });
             },
           ),
       ],
@@ -164,6 +176,9 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _online = value;
       _toggling = true;
+      // Going offline ends the session: clear the dedup guard so orders can be
+      // re-offered next time the courier comes back online.
+      if (!value) _shownOrderIds.clear();
     });
     try {
       await CourierService.setOnline(uid, value);
@@ -174,15 +189,9 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _AvailableOrdersListener extends StatelessWidget {
-  final String uid;
-  final VoidCallback onPresent;
-  final void Function(OrderModel) onShow;
+  final void Function(OrderModel) onOrder;
 
-  const _AvailableOrdersListener({
-    required this.uid,
-    required this.onPresent,
-    required this.onShow,
-  });
+  const _AvailableOrdersListener({required this.onOrder});
 
   @override
   Widget build(BuildContext context) {
@@ -191,10 +200,9 @@ class _AvailableOrdersListener extends StatelessWidget {
       builder: (context, snap) {
         final list = snap.data ?? const [];
         if (list.isNotEmpty) {
-          onPresent();
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (ModalRoute.of(context)?.isCurrent ?? false) {
-              onShow(list.first);
+              onOrder(list.first);
             }
           });
         }

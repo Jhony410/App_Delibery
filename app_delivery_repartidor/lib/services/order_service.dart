@@ -4,6 +4,31 @@ import '../models/order_model.dart';
 class OrderService {
   static final _db = FirebaseFirestore.instance;
 
+  // ───────────────────────────────────────────────────────────────────────
+  // FCM / push notifications — FUTURE WORK (not implemented yet)
+  //
+  // Today the courier app discovers new orders purely by listening to
+  // `streamAvailable()` (Firestore-as-bus). That only works while the app is
+  // foregrounded and online. To wake couriers when the app is backgrounded or
+  // closed, push notifications are needed — but tokens must never be sent to
+  // devices from the client, so the send MUST live in a trusted backend.
+  //
+  // When Cloud Functions are added, wire it up like this:
+  //   1. Client: on login, save the courier's FCM token to
+  //      `couriers/{uid}.fcmToken` (requires the `firebase_messaging` package).
+  //   2. Cloud Function (Node, in a separate `functions/` project):
+  //        - Trigger: onDocumentCreated / onDocumentUpdated for `orders/{id}`
+  //          when status becomes 'confirmed'/'preparing' and courierId == null.
+  //        - Query `couriers` where online == true, collect their fcmTokens.
+  //        - admin.messaging().sendEachForMulticast({ tokens, notification,
+  //          data: { orderId } }) so tapping the push deep-links to /new-order.
+  //        - On acceptOrder() claiming the order, send a silent data message to
+  //          the other couriers so their popup auto-dismisses even when closed.
+  //
+  // No FCM logic is added here on purpose — this app stays Flutter + Firestore
+  // only until the Cloud Functions backend exists.
+  // ───────────────────────────────────────────────────────────────────────
+
   /// Orders awaiting a courier — store has finished preparing.
   /// Filters `courierId == null` client-side so it matches both explicit-null
   /// and legacy docs that omit the field entirely (Firestore `isNull: true`

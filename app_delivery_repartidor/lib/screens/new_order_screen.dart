@@ -19,6 +19,7 @@ class _NewOrderScreenState extends State<NewOrderScreen>
   static const _windowSeconds = 15;
   late int _secondsLeft;
   Timer? _timer;
+  StreamSubscription<OrderModel?>? _statusSub;
   bool _accepting = false;
 
   @override
@@ -33,18 +34,38 @@ class _NewOrderScreenState extends State<NewOrderScreen>
         Navigator.of(context).maybePop();
       }
     });
+
+    // Auto-dismiss: watch this order's document. If its status leaves the
+    // available window (another courier accepted it, or it was cancelled /
+    // deleted), close the popup so we don't show a stale offer.
+    _statusSub = OrderService.streamOrder(widget.order.id).listen((order) {
+      if (!mounted || _accepting) return;
+      final status = order?.status;
+      if (status != 'confirmed' && status != 'preparing') {
+        _timer?.cancel();
+        Navigator.of(context).maybePop();
+      }
+    });
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _cancelListeners();
     super.dispose();
+  }
+
+  /// Stop the countdown and the order-status watcher. Idempotent — safe to call
+  /// from a dismissal path and again from [dispose].
+  void _cancelListeners() {
+    _timer?.cancel();
+    _statusSub?.cancel();
   }
 
   Future<void> _accept() async {
     final uid = AuthService.currentUid;
     if (uid == null) return;
     setState(() => _accepting = true);
+    _cancelListeners();
     try {
       final ok = await OrderService.acceptOrder(widget.order.id, uid);
       if (!mounted) return;
@@ -68,8 +89,15 @@ class _NewOrderScreenState extends State<NewOrderScreen>
   }
 
   void _reject() async {
+    // Cancel timer + status watcher up front, before the async write, so
+    // neither can fire during the gap or after the popup is gone.
+    _cancelListeners();
+    // Increment rejectedCount only — status is left untouched so the order
+    // stays available for other couriers.
     await OrderService.rejectOrder(widget.order.id);
-    if (mounted) Navigator.of(context).maybePop();
+    // Return the id so HomeScreen pins it in _shownOrderIds and never
+    // re-offers it to this courier for the rest of the session.
+    if (mounted) Navigator.of(context).maybePop(widget.order.id);
   }
 
   @override

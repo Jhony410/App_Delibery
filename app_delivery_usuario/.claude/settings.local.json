@@ -3,7 +3,10 @@
     "allow": [
       "Bash(flutter pub *)",
       "Bash(flutter analyze *)",
-      "PowerShell(Get-ChildItem *)"
+      "PowerShell(Get-ChildItem *)",
+      "Bash(flutter *)",
+      "Bash(Get-Content *)",
+      "PowerShell(Get-ItemProperty *)"
     ]
   }
 }

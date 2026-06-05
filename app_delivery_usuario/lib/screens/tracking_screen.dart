@@ -26,9 +26,13 @@ class _TrackingScreenState extends State<TrackingScreen> {
     }
   }
 
+  // Maps the shared order status (which the courier app also writes) onto the
+  // 4 visual steps: Recibido · Preparando · En camino · Entregado.
   int _activeStep(String status) => switch (status) {
         'confirmed' => 0,
         'preparing' => 1,
+        'accepted' => 1, // courier assigned, food still being prepared
+        'picked_up' => 2, // courier has the order, heading out
         'en_camino' => 2,
         'entregado' => 3,
         _ => 0,
@@ -37,6 +41,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
   String _etaLabel(String status) => switch (status) {
         'confirmed' => 'Pedido recibido',
         'preparing' => 'Preparando tu pedido',
+        'accepted' => 'Repartidor asignado',
+        'picked_up' => 'Pedido recogido',
         'en_camino' => 'En camino · aprox. 12 min',
         'entregado' => '¡Entregado!',
         _ => 'Procesando...',
@@ -304,91 +310,20 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
                         const SizedBox(height: 16),
 
-                        // Repartidor card
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: AppColors.bg,
-                            borderRadius: BorderRadius.circular(16),
+                        // Repartidor card — bound to couriers/{courierId} in
+                        // real time; placeholder until a courier accepts.
+                        if (order?.courierId == null)
+                          const _CourierCard(courier: null, assigned: false)
+                        else
+                          StreamBuilder<CourierInfo?>(
+                            stream:
+                                DbService.streamCourier(order!.courierId!),
+                            builder: (context, cs) => _CourierCard(
+                              courier: cs.data,
+                              assigned: true,
+                              orderId: order.id,
+                            ),
                           ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 50,
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: const Color(0xFFFFD0B0),
-                                  border: Border.all(color: Colors.white, width: 2),
-                                ),
-                                child: const Center(
-                                  child: Text('JR',
-                                      style: TextStyle(
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.w800,
-                                          color: AppColors.primary)),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('Julio Ramírez',
-                                        style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w700)),
-                                    const SizedBox(height: 2),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.motorcycle, size: 13),
-                                        const SizedBox(width: 4),
-                                        const Text('Honda roja · ',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: AppColors.textMuted)),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 5, vertical: 1),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                          ),
-                                          child: const Text('B3M-482',
-                                              style: TextStyle(
-                                                  fontFamily: 'monospace',
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 11)),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 3),
-                                    const Text('★ 4.9 · 1,240 entregas',
-                                        style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppColors.secondary)),
-                                  ],
-                                ),
-                              ),
-                              Row(
-                                children: [
-                                  _ActionBtn(
-                                    color: Colors.white,
-                                    borderColor: AppColors.border,
-                                    child: const Icon(Icons.chat_bubble_outline, size: 20),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _ActionBtn(
-                                    color: AppColors.secondary,
-                                    child: const Icon(Icons.phone, size: 20, color: Colors.white),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
 
                         // Resumen del pedido
                         if (order != null) ...[
@@ -607,6 +542,144 @@ class _MapPin extends StatelessWidget {
         ),
         child: child,
       );
+}
+
+class _CourierCard extends StatelessWidget {
+  final CourierInfo? courier;
+  final bool assigned; // the order already has a courierId
+  final String? orderId;
+  const _CourierCard({
+    required this.courier,
+    required this.assigned,
+    this.orderId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = courier;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFFFFD0B0),
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+            child: Center(
+              child: !assigned
+                  ? const Icon(Icons.person_search,
+                      size: 22, color: AppColors.primary)
+                  : c == null
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.primary),
+                        )
+                      : Text(c.initials,
+                          style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  !assigned
+                      ? 'Buscando repartidor...'
+                      : (c?.name.isNotEmpty == true ? c!.name : 'Repartidor'),
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+                if (assigned && c != null) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      const Icon(Icons.motorcycle, size: 13),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          c.vehicleModel.isEmpty
+                              ? 'Vehículo'
+                              : c.vehicleModel,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.textMuted),
+                        ),
+                      ),
+                      if (c.vehiclePlate.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(c.vehiclePlate,
+                              style: const TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11)),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '★ ${c.rating.toStringAsFixed(1)} · ${c.totalDeliveries} entregas',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.secondary),
+                  ),
+                ] else ...[
+                  const SizedBox(height: 2),
+                  const Text('Te asignaremos uno en breve',
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.textMuted)),
+                ],
+              ],
+            ),
+          ),
+          if (assigned && c != null)
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: orderId == null
+                      ? null
+                      : () => Navigator.pushNamed(context, '/chat',
+                          arguments: orderId),
+                  child: _ActionBtn(
+                    color: Colors.white,
+                    borderColor: AppColors.border,
+                    child: const Icon(Icons.chat_bubble_outline, size: 20),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _ActionBtn(
+                  color: AppColors.secondary,
+                  child:
+                      const Icon(Icons.phone, size: 20, color: Colors.white),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ActionBtn extends StatelessWidget {

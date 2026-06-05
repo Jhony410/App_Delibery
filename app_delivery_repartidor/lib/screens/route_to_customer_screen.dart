@@ -165,10 +165,16 @@ class RouteToCustomerScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const IconBox(
-                          icon: Icons.chat_bubble_outline,
-                          background: CourierColors.surface2,
-                          color: CourierColors.text,
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).pushNamed(
+                            '/chat',
+                            arguments: order,
+                          ),
+                          child: const IconBox(
+                            icon: Icons.chat_bubble_outline,
+                            background: CourierColors.surface2,
+                            color: CourierColors.text,
+                          ),
                         ),
                         const SizedBox(width: 8),
                         const IconBox(
