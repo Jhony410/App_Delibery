@@ -313,8 +313,7 @@ class _OrderRow extends StatelessWidget {
               flex: 2,
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: AdminBadge(order.statusLabel,
-                    tone: order.statusTone),
+                child: AdminBadge(order.statusLabel, tone: order.statusTone),
               ),
             ),
             Expanded(

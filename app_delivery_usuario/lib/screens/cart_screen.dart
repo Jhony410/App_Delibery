@@ -13,7 +13,8 @@ class CartScreen extends StatefulWidget {
 class _CartScreenState extends State<CartScreen> {
   @override
   Widget build(BuildContext context) {
-    final items = CartService.items;
+    final groups = CartService.groups;
+    final isEmpty = groups.isEmpty;
     return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
@@ -22,44 +23,8 @@ class _CartScreenState extends State<CartScreen> {
             children: [
               SizedBox(height: MediaQuery.of(context).padding.top + 8),
               _buildAppBar(context),
-              if (CartService.storeName != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryTint,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.location_on,
-                            size: 18, color: AppColors.primary),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(CartService.storeName!,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12.5)),
-                              const SizedBox(height: 1),
-                              Text(
-                                  '${CartService.deliveryTime ?? '--'} min · S/ ${CartService.deliveryFee.toStringAsFixed(2)} envío',
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textMuted)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               Expanded(
-                child: items.isEmpty
+                child: isEmpty
                     ? const Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -76,123 +41,53 @@ class _CartScreenState extends State<CartScreen> {
                         ),
                       )
                     : SingleChildScrollView(
-                        padding:
-                            const EdgeInsets.fromLTRB(20, 16, 20, 160),
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 220),
                         child: Column(
-                          children: [
-                            ...items.asMap().entries.map((e) {
-                              final i = e.value;
-                              final idx = e.key;
-                              final isLast = idx == items.length - 1;
-                              return Container(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 12),
-                                decoration: BoxDecoration(
-                                  border: Border(
-                                    bottom: BorderSide(
-                                      color: isLast
-                                          ? Colors.transparent
-                                          : AppColors.border,
-                                    ),
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    ImgPlaceholder(
-                                        height: 64,
-                                        width: 64,
-                                        tone: i.tone,
-                                        radius: 12),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(i.name,
-                                              style: const TextStyle(
-                                                  fontSize: 14,
-                                                  fontWeight:
-                                                      FontWeight.w700)),
-                                          if (i.note != null &&
-                                              i.note!.isNotEmpty) ...[
-                                            const SizedBox(height: 3),
-                                            Text(i.note!,
-                                                style: const TextStyle(
-                                                    fontSize: 11.5,
-                                                    color:
-                                                        AppColors.textMuted)),
-                                          ],
-                                          const SizedBox(height: 8),
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              _QtyControl(
-                                                qty: i.qty,
-                                                onIncrement: () =>
-                                                    setState(() =>
-                                                        CartService.increment(idx)),
-                                                onDecrement: () =>
-                                                    setState(() =>
-                                                        CartService.decrement(idx)),
-                                              ),
-                                              Text(
-                                                  'S/ ${i.lineTotal.toStringAsFixed(2)}',
-                                                  style: const TextStyle(
-                                                      fontSize: 14,
-                                                      fontWeight:
-                                                          FontWeight.w800)),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }),
-                          ],
+                          children: groups
+                              .map((g) => _StoreGroup(
+                                    group: g,
+                                    onChanged: () => setState(() {}),
+                                  ))
+                              .toList(),
                         ),
                       ),
               ),
             ],
           ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: EdgeInsets.fromLTRB(
-                  20, 16, 20, 16 + MediaQuery.of(context).padding.bottom),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(top: BorderSide(color: AppColors.border)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _TotalRow('Subtotal',
-                      'S/ ${CartService.subtotal.toStringAsFixed(2)}'),
-                  const SizedBox(height: 6),
-                  _TotalRow('Envío',
-                      'S/ ${CartService.deliveryFee.toStringAsFixed(2)}'),
-                  const SizedBox(height: 10),
-                  _TotalRow(
-                      'Total', 'S/ ${CartService.total.toStringAsFixed(2)}',
-                      bold: true),
-                  const SizedBox(height: 14),
-                  AppButton(
-                    label: 'Ir a pagar',
-                    onTap: items.isEmpty
-                        ? null
-                        : () => Navigator.pushNamed(context, '/address'),
-                  ),
-                ],
+          if (!isEmpty)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: EdgeInsets.fromLTRB(
+                    20, 16, 20, 16 + MediaQuery.of(context).padding.bottom),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: AppColors.border)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _TotalRow('Subtotal',
+                        'S/ ${CartService.subtotal.toStringAsFixed(2)}'),
+                    const SizedBox(height: 6),
+                    _TotalRow('Envío',
+                        'S/ ${CartService.deliveryFee.toStringAsFixed(2)}'),
+                    const SizedBox(height: 10),
+                    _TotalRow(
+                        'Total', 'S/ ${CartService.total.toStringAsFixed(2)}',
+                        bold: true),
+                    const SizedBox(height: 14),
+                    AppButton(
+                      label: 'Ir a pagar',
+                      onTap: () => Navigator.pushNamed(context, '/address'),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -229,6 +124,143 @@ class _CartScreenState extends State<CartScreen> {
                       fontWeight: FontWeight.w700,
                       color: AppColors.primary)),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One store's items in the cart, with a header, its lines, and a per-store
+/// subtotal + delivery fee.
+class _StoreGroup extends StatelessWidget {
+  final CartGroup group;
+  final VoidCallback onChanged;
+  const _StoreGroup({required this.group, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          // Store header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.primaryTint,
+              borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(15)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.storefront,
+                    size: 18, color: AppColors.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(group.storeName,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 13)),
+                      const SizedBox(height: 1),
+                      Text(
+                          '${group.deliveryTime ?? '--'} min · S/ ${group.deliveryFee.toStringAsFixed(2)} envío',
+                          style: const TextStyle(
+                              fontSize: 11.5, color: AppColors.textMuted)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Items
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Column(
+              children: group.items.asMap().entries.map((e) {
+                final item = e.value;
+                final isLast = e.key == group.items.length - 1;
+                return Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: isLast ? Colors.transparent : AppColors.border,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      ImgPlaceholder(
+                          height: 64, width: 64, tone: item.tone, radius: 12),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(item.name,
+                                style: const TextStyle(
+                                    fontSize: 14, fontWeight: FontWeight.w700)),
+                            if (item.note != null &&
+                                item.note!.isNotEmpty) ...[
+                              const SizedBox(height: 3),
+                              Text(item.note!,
+                                  style: const TextStyle(
+                                      fontSize: 11.5,
+                                      color: AppColors.textMuted)),
+                            ],
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _QtyControl(
+                                  qty: item.qty,
+                                  onIncrement: () {
+                                    CartService.incrementEntry(item);
+                                    onChanged();
+                                  },
+                                  onDecrement: () {
+                                    CartService.decrementEntry(item);
+                                    onChanged();
+                                  },
+                                ),
+                                Text('S/ ${item.lineTotal.toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w800)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          // Per-store subtotal + fee
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: AppColors.border)),
+            ),
+            child: Column(
+              children: [
+                _TotalRow('Subtotal',
+                    'S/ ${group.subtotal.toStringAsFixed(2)}'),
+                const SizedBox(height: 5),
+                _TotalRow('Envío',
+                    'S/ ${group.deliveryFee.toStringAsFixed(2)}'),
+              ],
+            ),
+          ),
         ],
       ),
     );

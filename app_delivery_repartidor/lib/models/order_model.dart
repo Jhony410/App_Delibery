@@ -56,6 +56,10 @@ class OrderModel {
   final DateTime? acceptedAt;
   final DateTime? pickedUpAt;
   final DateTime? deliveredAt;
+  // Round-robin dispatch: the courier this order is currently being offered to
+  // and when that 15s offer lapses. Null when no offer is outstanding.
+  final String? assignedCourierId;
+  final DateTime? assignmentExpiresAt;
 
   const OrderModel({
     required this.id,
@@ -81,6 +85,8 @@ class OrderModel {
     this.acceptedAt,
     this.pickedUpAt,
     this.deliveredAt,
+    this.assignedCourierId,
+    this.assignmentExpiresAt,
   });
 
   factory OrderModel.fromMap(String id, Map<String, dynamic> m) => OrderModel(
@@ -109,6 +115,8 @@ class OrderModel {
         acceptedAt: (m['acceptedAt'] as Timestamp?)?.toDate(),
         pickedUpAt: (m['pickedUpAt'] as Timestamp?)?.toDate(),
         deliveredAt: (m['deliveredAt'] as Timestamp?)?.toDate(),
+        assignedCourierId: m['assignedCourierId'] as String?,
+        assignmentExpiresAt: (m['assignmentExpiresAt'] as Timestamp?)?.toDate(),
       );
 
   // Status flow for courier:

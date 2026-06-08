@@ -1,5 +1,7 @@
 import '../models/order_model.dart';
 
+/// A single line in the cart. Each entry carries its own store data, so the
+/// cart can hold items from several stores at the same time (multi-store cart).
 class CartEntry {
   final String productId;
   final String name;
@@ -8,6 +10,15 @@ class CartEntry {
   final double unitPrice;
   int qty;
 
+  // Store this item belongs to. Stamped at add-time from the store being
+  // browsed, so items keep their origin even when the user moves on to
+  // another store.
+  final String storeId;
+  final String storeName;
+  final String storeTone;
+  final String? deliveryTime;
+  final double deliveryFee;
+
   CartEntry({
     required this.productId,
     required this.name,
@@ -15,22 +26,65 @@ class CartEntry {
     required this.tone,
     required this.unitPrice,
     this.qty = 1,
+    required this.storeId,
+    required this.storeName,
+    required this.storeTone,
+    this.deliveryTime,
+    required this.deliveryFee,
   });
 
   double get lineTotal => unitPrice * qty;
 }
 
+/// Alias matching the product spec — `CartEntry` already holds every field a
+/// `CartItem` needs (productId, productName/name, price/unitPrice, quantity/qty,
+/// storeId, storeName, deliveryFee).
+typedef CartItem = CartEntry;
+
+/// All items belonging to one store, used to render the cart grouped by store.
+class CartGroup {
+  final String storeId;
+  final String storeName;
+  final String storeTone;
+  final String? deliveryTime;
+  final double deliveryFee;
+  final List<CartEntry> items;
+
+  CartGroup({
+    required this.storeId,
+    required this.storeName,
+    required this.storeTone,
+    required this.deliveryTime,
+    required this.deliveryFee,
+    required this.items,
+  });
+
+  double get subtotal => items.fold(0.0, (s, e) => s + e.lineTotal);
+  double get total => subtotal + deliveryFee;
+  int get itemCount => items.fold(0, (s, e) => s + e.qty);
+}
+
+/// In-memory cart (static singleton — the app uses no state-management library).
+/// Holds items from multiple stores simultaneously. The `store*` fields below
+/// describe only the store currently being browsed; they are stamped onto each
+/// new [CartEntry] and used by the store/product screens for context labels.
 class CartService {
+  // ── Current browsing context (the store screen the user is looking at) ──
   static String? storeId;
   static String? storeName;
   static String? storeTone;
   static String? deliveryTime;
-  static double deliveryFee = 0;
+  static double currentDeliveryFee = 0;
+
+  // ── Cart contents (across all stores) ──
   static final List<CartEntry> items = [];
+
   static String selectedAddress = 'Av. Arequipa 2450, Lince';
   static String? selectedAddressRef;
   static String? lastDeliveryTime;
 
+  /// Sets the store the user is currently browsing. Does NOT clear the cart —
+  /// items from previously visited stores must survive navigation.
   static void setStore({
     required String id,
     required String name,
@@ -38,16 +92,17 @@ class CartService {
     required String time,
     required double fee,
   }) {
-    if (storeId != id) items.clear();
     storeId = id;
     storeName = name;
     storeTone = tone;
     deliveryTime = time;
-    deliveryFee = fee;
+    currentDeliveryFee = fee;
   }
 
   static void addOrIncrement(CartEntry entry) {
-    final idx = items.indexWhere((e) => e.productId == entry.productId);
+    // Same product from the same store merges; otherwise it's a new line.
+    final idx = items.indexWhere(
+        (e) => e.productId == entry.productId && e.storeId == entry.storeId);
     if (idx >= 0) {
       items[idx].qty += entry.qty;
     } else {
@@ -55,13 +110,13 @@ class CartService {
     }
   }
 
-  static void increment(int idx) => items[idx].qty++;
+  static void incrementEntry(CartEntry entry) => entry.qty++;
 
-  static void decrement(int idx) {
-    if (items[idx].qty > 1) {
-      items[idx].qty--;
+  static void decrementEntry(CartEntry entry) {
+    if (entry.qty > 1) {
+      entry.qty--;
     } else {
-      items.removeAt(idx);
+      items.remove(entry);
     }
   }
 
@@ -72,11 +127,42 @@ class CartService {
     storeName = null;
     storeTone = null;
     deliveryTime = null;
-    deliveryFee = 0;
+    currentDeliveryFee = 0;
+  }
+
+  /// Cart items grouped by store, preserving first-seen order.
+  static List<CartGroup> get groups {
+    final map = <String, CartGroup>{};
+    for (final e in items) {
+      final g = map.putIfAbsent(
+        e.storeId,
+        () => CartGroup(
+          storeId: e.storeId,
+          storeName: e.storeName,
+          storeTone: e.storeTone,
+          deliveryTime: e.deliveryTime,
+          deliveryFee: e.deliveryFee,
+          items: [],
+        ),
+      );
+      g.items.add(e);
+    }
+    return map.values.toList();
   }
 
   static int get itemCount => items.fold(0, (s, e) => s + e.qty);
   static double get subtotal => items.fold(0.0, (s, e) => s + e.lineTotal);
+
+  /// Grand delivery fee: each distinct store in the cart contributes its fee once.
+  static double get deliveryFee {
+    final seen = <String>{};
+    double sum = 0;
+    for (final e in items) {
+      if (seen.add(e.storeId)) sum += e.deliveryFee;
+    }
+    return sum;
+  }
+
   static double get total => subtotal + deliveryFee;
 
   static List<OrderItem> toOrderItems() => items

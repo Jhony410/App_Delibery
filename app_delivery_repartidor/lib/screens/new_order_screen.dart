@@ -16,32 +16,49 @@ class NewOrderScreen extends StatefulWidget {
 
 class _NewOrderScreenState extends State<NewOrderScreen>
     with SingleTickerProviderStateMixin {
-  static const _windowSeconds = 15;
+  // Offer window length, used only as the progress-ring denominator. The actual
+  // countdown is derived from the server's assignmentExpiresAt so it stays
+  // correct even if the app was briefly backgrounded.
+  static const _windowSeconds = 30;
   late int _secondsLeft;
   Timer? _timer;
   StreamSubscription<OrderModel?>? _statusSub;
   bool _accepting = false;
+  bool _releasing = false;
+
+  String? get _uid => AuthService.currentUid;
+
+  /// Whole seconds until this offer lapses, from the server timestamp. Falls
+  /// back to the full window if the order arrived without an expiry set.
+  int _remainingSeconds() {
+    final expiresAt = widget.order.assignmentExpiresAt;
+    if (expiresAt == null) return _windowSeconds;
+    final diff = expiresAt.difference(DateTime.now()).inMilliseconds;
+    return (diff / 1000).ceil().clamp(0, _windowSeconds);
+  }
 
   @override
   void initState() {
     super.initState();
-    _secondsLeft = _windowSeconds;
+    _secondsLeft = _remainingSeconds();
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return;
-      setState(() => _secondsLeft--);
+      setState(() => _secondsLeft = _remainingSeconds());
       if (_secondsLeft <= 0) {
         t.cancel();
-        Navigator.of(context).maybePop();
+        _onTimeout();
       }
     });
 
-    // Auto-dismiss: watch this order's document. If its status leaves the
-    // available window (another courier accepted it, or it was cancelled /
-    // deleted), close the popup so we don't show a stale offer.
+    // Auto-dismiss: watch this order's document. Close the popup if the offer is
+    // no longer ours — another courier accepted it, it was cancelled/deleted, or
+    // the dispatcher rotated the offer to someone else (assignedCourierId moved).
     _statusSub = OrderService.streamOrder(widget.order.id).listen((order) {
-      if (!mounted || _accepting) return;
-      final status = order?.status;
-      if (status != 'confirmed' && status != 'preparing') {
+      if (!mounted || _accepting || _releasing) return;
+      final stillMine = order != null &&
+          order.status == 'confirmed' &&
+          order.assignedCourierId == _uid;
+      if (!stillMine) {
         _timer?.cancel();
         Navigator.of(context).maybePop();
       }
@@ -88,15 +105,27 @@ class _NewOrderScreenState extends State<NewOrderScreen>
     }
   }
 
-  void _reject() async {
+  void _reject() => _release();
+
+  /// The countdown reached zero without the courier acting — treat it exactly
+  /// like a rejection so the dispatcher rotates to the next courier.
+  void _onTimeout() => _release();
+
+  /// Release this courier's offer (reject or timeout): record the rejection and
+  /// clear the offer so the Cloud Function offers the order to the next courier.
+  /// Guarded so the timeout path and a manual reject can't both fire.
+  Future<void> _release() async {
+    if (_releasing || _accepting) return;
+    _releasing = true;
     // Cancel timer + status watcher up front, before the async write, so
     // neither can fire during the gap or after the popup is gone.
     _cancelListeners();
-    // Increment rejectedCount only — status is left untouched so the order
-    // stays available for other couriers.
-    await OrderService.rejectOrder(widget.order.id);
+    final uid = _uid;
+    if (uid != null) {
+      await OrderService.releaseOffer(widget.order.id, uid);
+    }
     // Return the id so HomeScreen pins it in _shownOrderIds and never
-    // re-offers it to this courier for the rest of the session.
+    // re-shows it to this courier for the rest of the session.
     if (mounted) Navigator.of(context).maybePop(widget.order.id);
   }
 

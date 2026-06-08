@@ -44,11 +44,17 @@ class OrderModel {
   final String? observation;
   final String? courierId;
   final String? courierName;
+  // Round-robin dispatch: courier currently being offered the order and when
+  // that 15s offer lapses. Null when no offer is outstanding.
+  final String? assignedCourierId;
+  final DateTime? assignmentExpiresAt;
   final double? distanceKm;
   final DateTime createdAt;
   final DateTime? acceptedAt;
   final DateTime? pickedUpAt;
   final DateTime? deliveredAt;
+  final DateTime? cancelledAt;
+  final DateTime? expiresAt;
 
   const OrderModel({
     required this.id,
@@ -70,11 +76,15 @@ class OrderModel {
     this.observation,
     this.courierId,
     this.courierName,
+    this.assignedCourierId,
+    this.assignmentExpiresAt,
     this.distanceKm,
     required this.createdAt,
     this.acceptedAt,
     this.pickedUpAt,
     this.deliveredAt,
+    this.cancelledAt,
+    this.expiresAt,
   });
 
   factory OrderModel.fromMap(String id, Map<String, dynamic> m) => OrderModel(
@@ -99,12 +109,17 @@ class OrderModel {
         observation: m['observation'] as String?,
         courierId: m['courierId'] as String?,
         courierName: m['courierName'] as String?,
+        assignedCourierId: m['assignedCourierId'] as String?,
+        assignmentExpiresAt:
+            (m['assignmentExpiresAt'] as Timestamp?)?.toDate(),
         distanceKm: (m['distanceKm'] as num?)?.toDouble(),
         createdAt:
             (m['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
         acceptedAt: (m['acceptedAt'] as Timestamp?)?.toDate(),
         pickedUpAt: (m['pickedUpAt'] as Timestamp?)?.toDate(),
         deliveredAt: (m['deliveredAt'] as Timestamp?)?.toDate(),
+        cancelledAt: (m['cancelledAt'] as Timestamp?)?.toDate(),
+        expiresAt: (m['expiresAt'] as Timestamp?)?.toDate(),
       );
 
   String get statusLabel => switch (status) {
@@ -117,6 +132,7 @@ class OrderModel {
         'entregado' => 'Entregado',
         'cancelado' => 'Cancelado',
         'searching' => 'Buscando rep.',
+        'sin_repartidor' => 'Sin repartidor',
         _ => status,
       };
 
@@ -124,7 +140,7 @@ class OrderModel {
   String get statusTone => switch (status) {
         'en_camino' || 'accepted' || 'picked_up' => 'green',
         'preparing' || 'confirmed' || 'searching' => 'amber',
-        'cancelado' => 'red',
+        'cancelado' || 'sin_repartidor' => 'red',
         'entregado' => 'gray',
         _ => 'gray',
       };

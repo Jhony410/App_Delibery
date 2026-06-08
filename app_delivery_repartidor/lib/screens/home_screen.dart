@@ -150,6 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         if (_online)
           _AvailableOrdersListener(
+            courierUid: uid,
             onOrder: (order) {
               // Guard against showing the same order twice, and against
               // stacking a second popup while one is already open.
@@ -189,14 +190,18 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _AvailableOrdersListener extends StatelessWidget {
+  final String courierUid;
   final void Function(OrderModel) onOrder;
 
-  const _AvailableOrdersListener({required this.onOrder});
+  const _AvailableOrdersListener({
+    required this.courierUid,
+    required this.onOrder,
+  });
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<OrderModel>>(
-      stream: OrderService.streamAvailable(),
+      stream: OrderService.streamMyOffers(courierUid),
       builder: (context, snap) {
         final list = snap.data ?? const [];
         if (list.isNotEmpty) {

@@ -1,0 +1,147 @@
+rules_version = '2';
+
+// Firestore security rules for the DeliPuno platform (delypuno-ddd2d), shared
+// by the customer app (app_delivery_usuario), the courier app
+// (app_delivery_repartidor) and the admin panel (app_delivery_administrator).
+//
+// Cloud Functions (e.g. autoDeleteExpiredOrders) use the Admin SDK and bypass
+// every rule below — no rule is needed to let the cleanup function delete.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ─────────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isCourier() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/couriers/$(request.auth.uid));
+    }
+
+    // ── Admin profiles ──────────────────────────────────────────────────
+    // An admin may read their own profile or any admin once they are an admin.
+    match /admins/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // ── Customers ───────────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read: if isSignedIn()
+        && (request.auth.uid == uid || isAdmin() || isCourier());
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow update, delete: if isSignedIn()
+        && (request.auth.uid == uid || isAdmin());
+
+      // Saved delivery addresses are private to the owner (admin may inspect).
+      match /addresses/{addressId} {
+        allow read, write: if isSignedIn()
+          && (request.auth.uid == uid || isAdmin());
+      }
+    }
+
+    // ── Couriers ────────────────────────────────────────────────────────
+    // Customers read the assigned courier's public card on the tracking
+    // screen, so any signed-in user may read; only the courier or an admin
+    // may write the profile.
+    match /couriers/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow update: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // ── Public catalogue (stores + their products) ──────────────────────
+    // Readable by everyone (the customer app browses before auth); writable
+    // only by admins.
+    match /stores/{storeId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      match /products/{productId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+
+    // ── Orders ──────────────────────────────────────────────────────────
+    match /orders/{orderId} {
+      function isOwner() {
+        return isSignedIn() && request.auth.uid == resource.data.userId;
+      }
+
+      // True when `field` is unchanged between the existing and incoming docs.
+      // Used to lock fields that clients must never rewrite.
+      function unchanged(field) {
+        return request.resource.data[field] == resource.data[field];
+      }
+
+      // Customers cannot read their CANCELLED orders; admins and couriers can
+      // read everything. NOTE: because Firestore rules are not filters, a
+      // customer's order-list query must include a status filter so it only
+      // returns non-cancelled docs (see deployment notes).
+      //
+      // CAVEAT: Firestore rules guard whole documents, not individual fields —
+      // they cannot hide assignedCourierId / assignmentExpiresAt /
+      // rejectedCouriers from a client that is allowed to read the order. The
+      // customer app simply does not surface those dispatch fields; if true
+      // field-level secrecy is ever required, move dispatch state into an
+      // orders/{id}/dispatch subdocument the customer cannot read.
+      allow read: if isAdmin()
+        || isCourier()
+        || (isOwner() && resource.data.status != 'cancelado');
+
+      // A customer creates their own order.
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+
+      // Admins may change anything. The owning customer or a courier may update
+      // status/assignment fields, but the order's immutable identity and the
+      // server-owned TTL fields must never change from a client. The round-robin
+      // dispatch fields (assignedCourierId, assignmentExpiresAt,
+      // rejectedCouriers) are intentionally writable here so the courier app can
+      // accept (set its own uid) or release an offer (clear them / arrayUnion
+      // its uid into rejectedCouriers); the Cloud Functions own the rest of the
+      // rotation and run via the Admin SDK, bypassing these rules.
+      allow update: if isAdmin()
+        || (
+          isSignedIn()
+          && (isOwner() || isCourier())
+          && unchanged('userId')
+          && unchanged('storeId')
+          && unchanged('items')
+          && unchanged('total')
+          && unchanged('subtotal')
+          && unchanged('createdAt')
+          && unchanged('expiresAt')
+        );
+
+      // Clients never delete orders; the scheduled Cloud Function (Admin SDK)
+      // handles all deletions. Admins may still delete from the console.
+      allow delete: if isAdmin();
+    }
+
+    // ── Support tickets ─────────────────────────────────────────────────
+    match /tickets/{ticketId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if isSignedIn();
+    }
+
+    // ── Order chat (customer <-> courier) ───────────────────────────────
+    // Kept accessible to any signed-in participant; tighten later if needed.
+    match /chats/{chatId} {
+      allow read, write: if isSignedIn();
+
+      match /messages/{messageId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+  }
+}

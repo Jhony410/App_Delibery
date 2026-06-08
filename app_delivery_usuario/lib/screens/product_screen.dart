@@ -59,8 +59,25 @@ class _ProductScreenState extends State<ProductScreen> {
       tone: product.tone,
       unitPrice: _computePrice(product) / _qty,
       qty: _qty,
+      storeId: CartService.storeId ?? product.storeId,
+      storeName: CartService.storeName ?? '',
+      storeTone: CartService.storeTone ?? product.tone,
+      deliveryTime: CartService.deliveryTime,
+      deliveryFee: CartService.currentDeliveryFee,
     ));
-    Navigator.pushNamed(context, '/cart');
+    // Non-blocking feedback — keep the user on the screen so they can keep
+    // browsing and adding more products. Navigation to the cart is explicit
+    // (the floating "Ver carrito" bar on the store screen).
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Agregado al carrito · ${product.name}'),
+        duration: const Duration(milliseconds: 1400),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.appText,
+      ),
+    );
   }
 
   @override

@@ -20,7 +20,7 @@ class OrderService {
     return _col
         .where('status',
             whereIn: ['pending', 'confirmed', 'preparing', 'accepted',
-              'picked_up', 'en_camino', 'searching'])
+              'picked_up', 'en_camino', 'searching', 'sin_repartidor'])
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((s) => s.docs
@@ -49,13 +49,25 @@ class OrderService {
     });
   }
 
-  /// Forces a courier reassignment by clearing courierId; the dispatcher will
-  /// pick the order back up.
+  /// Permanently deletes an order document. Only used from the admin panel for
+  /// cancelled orders; the scheduled Cloud Function also deletes via Admin SDK.
+  static Future<void> delete(String id) {
+    return _col.doc(id).delete();
+  }
+
+  /// Restarts round-robin dispatch from the beginning. Clears any assigned
+  /// courier and the whole rejection history, and moves the order back to
+  /// 'confirmed' so the Cloud Function's onUpdate trigger re-offers it to the
+  /// first eligible courier. Used both to retry a 'sin_repartidor' order and to
+  /// force a reassignment while still searching.
   static Future<void> reassign(String id) {
     return _col.doc(id).update({
       'courierId': null,
       'courierName': null,
-      'status': 'searching',
+      'status': 'confirmed',
+      'assignedCourierId': null,
+      'assignmentExpiresAt': null,
+      'rejectedCouriers': <String>[],
     });
   }
 }

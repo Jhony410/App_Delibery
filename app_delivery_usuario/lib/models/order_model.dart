@@ -103,6 +103,19 @@ class OrderModel {
         if (observation != null && observation!.isNotEmpty)
           'observation': observation,
         'createdAt': Timestamp.fromDate(createdAt),
+        // TTL fields for auto-deletion (see Cloud Function autoDeleteExpiredOrders).
+        // An un-picked-up order self-expires 30 min after it is created.
+        'expiresAt':
+            Timestamp.fromDate(createdAt.add(const Duration(minutes: 30))),
+        // Set by the admin panel when an order is cancelled; null until then.
+        'cancelledAt': null,
+        // Round-robin courier dispatch (owned by Cloud Functions + courier app).
+        // assignedCourierId: courier currently being offered the order.
+        // assignmentExpiresAt: when that 15s offer lapses.
+        // rejectedCouriers: couriers that already rejected / timed out.
+        'assignedCourierId': null,
+        'assignmentExpiresAt': null,
+        'rejectedCouriers': <String>[],
       };
 
   // pending | confirmed | preparing | accepted | picked_up | en_camino
