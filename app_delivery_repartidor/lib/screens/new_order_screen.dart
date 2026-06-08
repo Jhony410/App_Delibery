@@ -111,16 +111,21 @@ class _NewOrderScreenState extends State<NewOrderScreen>
   /// like a rejection so the dispatcher rotates to the next courier.
   void _onTimeout() => _release();
 
-  /// Dismiss this offer (reject or timeout). In the broadcast model the order
-  /// stays available to other couriers, so there's no Firestore write — we just
-  /// close the popup and return the id so HomeScreen pins it in _shownOrderIds
-  /// and never re-shows it to this courier for the rest of the session. Guarded
-  /// so the timeout path and a manual reject can't both fire.
-  void _release() {
+  /// Dismiss this offer (reject or timeout). In the targeted round-robin model
+  /// we hand the order back to the dispatcher: `releaseOffer` records this
+  /// courier as having passed and clears the offer, which re-fires the Cloud
+  /// Function to rotate to the next courier (or re-offer to this same courier
+  /// with a fresh 30s window when they're the only one active). Guarded so the
+  /// timeout path and a manual reject can't both fire.
+  Future<void> _release() async {
     if (_releasing || _accepting) return;
     _releasing = true;
     _cancelListeners();
-    if (mounted) Navigator.of(context).maybePop(widget.order.id);
+    final uid = AuthService.currentUid;
+    if (uid != null) {
+      await OrderService.releaseOffer(widget.order.id, uid);
+    }
+    if (mounted) Navigator.of(context).maybePop();
   }
 
   @override

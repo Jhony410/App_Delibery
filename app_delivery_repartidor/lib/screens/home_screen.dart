@@ -19,11 +19,13 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _toggling = false;
   bool _newOrderShown = false;
 
-  /// Order IDs already surfaced to this courier during the current online
-  /// session. Prevents the popup from firing twice for the same order — e.g.
-  /// after a reject or timeout, when the order is still in `streamAvailable()`.
+  /// Offer instances already surfaced to this courier during the current online
+  /// session, keyed by `orderId@assignmentExpiresAt`. Prevents the popup from
+  /// firing twice for the SAME offer, while still re-showing the order when the
+  /// round-robin re-offers it (a fresh `assignmentExpiresAt` ⇒ a new key) — this
+  /// is what lets a lone active courier keep being re-offered every 30s.
   /// Reset only when the courier goes offline (see [_setOnline]).
-  final Set<String> _shownOrderIds = {};
+  final Set<String> _shownOffers = {};
 
   String? get _uid => AuthService.currentUid;
 
@@ -150,43 +152,49 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         if (_online)
           _AvailableOrdersListener(
+            courierId: uid,
             onOrders: (orders) {
               // Don't stack a second popup while one is already open.
               if (_newOrderShown) return;
-              // Surface the first available order this courier hasn't already
-              // seen this session (rejected/expired ones are pinned below).
+              // Surface the first offer this courier hasn't already seen. Each
+              // offer is keyed by its expiry so a re-offer (new window) re-shows
+              // even for the same order — see [_shownOffers].
               OrderModel? next;
+              String? nextKey;
               for (final o in orders) {
-                if (!_shownOrderIds.contains(o.id)) {
+                final key = _offerKey(o);
+                if (!_shownOffers.contains(key)) {
                   next = o;
+                  nextKey = key;
                   break;
                 }
               }
               if (next == null) return;
               _newOrderShown = true;
-              _shownOrderIds.add(next.id);
+              _shownOffers.add(nextKey!);
               Navigator.of(context).pushNamed(
                 '/new-order',
                 arguments: next,
-              ).then((result) {
-                _newOrderShown = false;
-                // Rechazar/timeout pops with the orderId — pin it so it's not
-                // re-shown to this courier for the rest of the session.
-                if (result is String) _shownOrderIds.add(result);
-              });
+              ).then((_) => _newOrderShown = false);
             },
           ),
       ],
     );
   }
 
+  /// Stable key for a single offer instance: the order plus the moment its
+  /// current window expires. A fresh round-robin offer carries a new expiry, so
+  /// it produces a new key and re-shows even for an order seen before.
+  String _offerKey(OrderModel o) =>
+      '${o.id}@${o.assignmentExpiresAt?.millisecondsSinceEpoch ?? 0}';
+
   Future<void> _setOnline(String uid, bool value) async {
     setState(() {
       _online = value;
       _toggling = true;
-      // Going offline ends the session: clear the dedup guard so orders can be
-      // re-offered next time the courier comes back online.
-      if (!value) _shownOrderIds.clear();
+      // Going offline ends the session: clear the dedup guard so offers can be
+      // re-shown next time the courier comes back online.
+      if (!value) _shownOffers.clear();
     });
     try {
       await CourierService.setOnline(uid, value);
@@ -197,14 +205,18 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _AvailableOrdersListener extends StatelessWidget {
+  final String courierId;
   final void Function(List<OrderModel>) onOrders;
 
-  const _AvailableOrdersListener({required this.onOrders});
+  const _AvailableOrdersListener({
+    required this.courierId,
+    required this.onOrders,
+  });
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<OrderModel>>(
-      stream: OrderService.streamAvailable(),
+      stream: OrderService.streamOffersFor(courierId),
       builder: (context, snap) {
         final list = snap.data ?? const [];
         if (list.isNotEmpty) {

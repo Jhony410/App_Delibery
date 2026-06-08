@@ -12,8 +12,9 @@
  *                           order re-enters the "needs a courier" state (a
  *                           courier rejected / timed out, or an admin retried).
  *   reclaimExpiredOffers  — scheduled backstop (every 1 min) that releases
- *                           offers whose 15s window lapsed without the offered
- *                           courier's app responding (e.g. app was closed).
+ *                           offers whose 30s window lapsed without the offered
+ *                           courier's app responding (e.g. app was closed), so
+ *                           the round-robin keeps rotating.
  *
  * Runs with the Firebase Admin SDK, so it bypasses Firestore security rules.
  */
@@ -120,15 +121,18 @@ exports.autoDeleteExpiredOrders = functions.pubsub
 // status "confirmed"; the offer itself lives in three dedicated fields:
 //
 //   assignedCourierId  — the single courier currently being offered the order
-//   assignmentExpiresAt — when that 15s offer lapses
-//   rejectedCouriers   — couriers who already rejected / timed out
+//   assignmentExpiresAt — when that 30s offer lapses
+//   rejectedCouriers   — couriers who already passed in the CURRENT cycle
 //
 // A courier ACCEPTS by setting status "accepted" + courierId (see the courier
-// app's OrderService.acceptOrder). When no courier is left the order moves to
-// the terminal-ish status "sin_repartidor" for the admin to retry manually.
+// app's OrderService.acceptOrder). The offer rotates CONTINUOUSLY: when the
+// cycle is exhausted it resets and starts over, so the order keeps being
+// offered (looping through couriers, or re-offered to a lone courier) until
+// someone accepts or it is cancelled. It only parks as "sin_repartidor" when
+// there are zero online active couriers.
 // ─────────────────────────────────────────────────────────────────────────
 
-const OFFER_WINDOW_MS = 15 * 1000; // must match the courier app countdown
+const OFFER_WINDOW_MS = 30 * 1000; // must match the courier app countdown
 const FieldValue = admin.firestore.FieldValue;
 
 /**
@@ -147,20 +151,31 @@ function needsCourier(data) {
 }
 
 /**
- * Offers `orderRef` to the next eligible courier, or marks it
- * "sin_repartidor" when none remain. Wrapped in a transaction so two triggers
- * firing for the same order can never double-offer it.
+ * Offers `orderRef` to the next eligible courier in a CONTINUOUS round-robin.
+ * Wrapped in a transaction so two triggers firing for the same order can never
+ * double-offer it.
  *
  * Courier eligibility (matches the existing field names):
  *   online == true          — courier is connected
  *   status == "active"      — courier is approved (couriers.status, not an
  *                             "approved" flag — that field does not exist)
- *   uid NOT in rejectedCouriers
  *
- * Round-robin determinism (constraint #5): candidates are sorted by document
- * id, so the same set of available couriers always yields the same order. As
- * couriers reject/timeout they accumulate in rejectedCouriers and are skipped,
- * so successive offers rotate through the list.
+ * Round-robin determinism: candidates are sorted by document id, so the same
+ * set of available couriers always yields the same order. As couriers
+ * reject/timeout they accumulate in `rejectedCouriers` and are skipped, so
+ * successive offers rotate through the list (courier1 → courier2 → courier3…).
+ *
+ * CONTINUOUS rotation (the key behaviour for the spec): when every online
+ * courier has already passed in the current cycle (`rejectedCouriers` covers
+ * them all) we do NOT give up — we RESET the cycle and start over from the top.
+ * This means:
+ *   • with several couriers, the offer loops 1 → 2 → 3 → 1 → … forever;
+ *   • with a single active courier, the order is re-offered to that same
+ *     courier every window indefinitely.
+ * The loop only ever stops when a courier accepts (status → "accepted") or the
+ * order is cancelled. The order is parked as "sin_repartidor" ONLY when there
+ * are literally zero online active couriers; an admin "Reasignar" (or a courier
+ * coming online and the order being reset) restarts the rotation.
  */
 async function offerToNextCourier(orderRef) {
   // The candidate query is a non-transactional read (a collection query inside
@@ -184,32 +199,44 @@ async function offerToNextCourier(orderRef) {
     if (order.courierId) return;
     if (order.assignedCourierId) return;
 
-    const rejected = Array.isArray(order.rejectedCouriers)
-      ? order.rejectedCouriers
-      : [];
-    const candidates = onlineUids.filter((uid) => !rejected.includes(uid));
-
-    if (candidates.length === 0) {
+    // No couriers online at all — nothing to rotate through. Park the order so
+    // the admin can retry; it cannot self-recover until a courier exists.
+    if (onlineUids.length === 0) {
       tx.update(orderRef, {
         status: "sin_repartidor",
         assignedCourierId: null,
         assignmentExpiresAt: null,
       });
       functions.logger.info(
-        `offerToNextCourier: ${orderRef.id} -> sin_repartidor ` +
-          `(${onlineUids.length} online, all rejected).`
+        `offerToNextCourier: ${orderRef.id} -> sin_repartidor (0 online).`
       );
       return;
+    }
+
+    let rejected = Array.isArray(order.rejectedCouriers)
+      ? order.rejectedCouriers
+      : [];
+    let candidates = onlineUids.filter((uid) => !rejected.includes(uid));
+
+    // Everyone in the current cycle has already passed → start a fresh cycle.
+    // This is what makes the rotation continuous (and re-offers to a lone
+    // courier indefinitely).
+    if (candidates.length === 0) {
+      rejected = [];
+      candidates = onlineUids;
     }
 
     const next = candidates[0];
     tx.update(orderRef, {
       assignedCourierId: next,
       assignmentExpiresAt: Timestamp.fromMillis(Date.now() + OFFER_WINDOW_MS),
+      // Persist the (possibly reset) cycle so the next rotation is correct.
+      rejectedCouriers: rejected,
       // status stays "confirmed"
     });
     functions.logger.info(
-      `offerToNextCourier: ${orderRef.id} offered to ${next}.`
+      `offerToNextCourier: ${orderRef.id} offered to ${next} ` +
+        `(${candidates.length} candidate(s), ${onlineUids.length} online).`
     );
   });
 }
@@ -240,10 +267,12 @@ exports.offerOrderOnReleased = functions.firestore
   });
 
 // Backstop — Firebase scheduled functions cannot run faster than 1 minute, so
-// they cannot enforce the 15s window in real time. The courier app releases its
-// own lapsed offer immediately; this sweep only catches offers stranded because
-// the offered courier's app was backgrounded / closed and never wrote back.
-// Releasing the offer here (assignedCourierId -> null) re-fires Trigger B.
+// they cannot enforce the 30s window in real time. The courier app releases its
+// own lapsed offer immediately (OrderService.releaseOffer); this sweep only
+// catches offers stranded because the offered courier's app was backgrounded /
+// closed and never wrote back. Releasing the offer here (adding the courier to
+// rejectedCouriers + assignedCourierId -> null) re-fires Trigger B, which
+// rotates to the next courier (or back to the same lone courier).
 exports.reclaimExpiredOffers = functions.pubsub
   .schedule("every 1 minutes")
   .onRun(async () => {

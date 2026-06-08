@@ -47,6 +47,10 @@ class OrderModel {
   final String paymentMethod;
   final String? observation;
   final String? courierId;
+  // Round-robin offer field (owned by Cloud Functions): the courier currently
+  // being offered the order while it is still 'confirmed'. Used as a fallback
+  // to resolve the courier's identity for the tracking card.
+  final String? assignedCourierId;
   final DateTime createdAt;
 
   const OrderModel({
@@ -64,6 +68,7 @@ class OrderModel {
     required this.paymentMethod,
     this.observation,
     this.courierId,
+    this.assignedCourierId,
     required this.createdAt,
   });
 
@@ -84,6 +89,7 @@ class OrderModel {
         paymentMethod: m['paymentMethod'],
         observation: m['observation'] as String?,
         courierId: m['courierId'] as String?,
+        assignedCourierId: m['assignedCourierId'] as String?,
         createdAt: (m['createdAt'] as Timestamp).toDate(),
       );
 

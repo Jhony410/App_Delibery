@@ -988,10 +988,11 @@ class _NoCourierRow extends StatelessWidget {
   }
 }
 
-/// The 15s offer countdown shown while a single courier is being offered the
+/// The 30s offer countdown shown while a single courier is being offered the
 /// order. Counts down from `assignmentExpiresAt` (server-driven, so it stays in
 /// sync) and depletes a progress bar; at zero it flips to a "buscando
-/// siguiente…" state while the Cloud Function rotates to the next courier.
+/// siguiente…" state while the Cloud Function rotates to the next courier
+/// (continuous round-robin — it never gives up while couriers are online).
 class _OfferCountdown extends StatefulWidget {
   final String courierId;
   final DateTime expiresAt;
@@ -1006,7 +1007,7 @@ class _OfferCountdown extends StatefulWidget {
 }
 
 class _OfferCountdownState extends State<_OfferCountdown> {
-  static const _window = 15;
+  static const _window = 30;
   Timer? _timer;
   late int _secondsLeft;
   String? _name;

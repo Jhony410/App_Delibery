@@ -311,19 +311,37 @@ class _TrackingScreenState extends State<TrackingScreen> {
                         const SizedBox(height: 16),
 
                         // Repartidor card — bound to couriers/{courierId} in
-                        // real time; placeholder until a courier accepts.
-                        if (order?.courierId == null)
-                          const _CourierCard(courier: null, assigned: false)
-                        else
-                          StreamBuilder<CourierInfo?>(
-                            stream:
-                                DbService.streamCourier(order!.courierId!),
+                        // real time; placeholder until a courier is locked in.
+                        // Mirrors the admin panel: a courier is considered
+                        // assigned once they accept (courierId set) OR the order
+                        // has progressed past acceptance. We resolve the id from
+                        // courierId, falling back to the round-robin
+                        // assignedCourierId so legacy/edge orders still show the
+                        // driver instead of "Buscando repartidor".
+                        Builder(builder: (context) {
+                          final hasCourier = order != null &&
+                              (order.courierId != null ||
+                                  const [
+                                    'accepted',
+                                    'picked_up',
+                                    'en_camino',
+                                    'entregado',
+                                  ].contains(order.status));
+                          final courierId =
+                              order?.courierId ?? order?.assignedCourierId;
+                          if (!hasCourier || courierId == null) {
+                            return const _CourierCard(
+                                courier: null, assigned: false);
+                          }
+                          return StreamBuilder<CourierInfo?>(
+                            stream: DbService.streamCourier(courierId),
                             builder: (context, cs) => _CourierCard(
                               courier: cs.data,
                               assigned: true,
                               orderId: order.id,
                             ),
-                          ),
+                          );
+                        }),
 
                         // Resumen del pedido
                         if (order != null) ...[
