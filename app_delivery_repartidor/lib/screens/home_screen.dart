@@ -150,21 +150,28 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         if (_online)
           _AvailableOrdersListener(
-            courierUid: uid,
-            onOrder: (order) {
-              // Guard against showing the same order twice, and against
-              // stacking a second popup while one is already open.
+            onOrders: (orders) {
+              // Don't stack a second popup while one is already open.
               if (_newOrderShown) return;
-              if (_shownOrderIds.contains(order.id)) return;
+              // Surface the first available order this courier hasn't already
+              // seen this session (rejected/expired ones are pinned below).
+              OrderModel? next;
+              for (final o in orders) {
+                if (!_shownOrderIds.contains(o.id)) {
+                  next = o;
+                  break;
+                }
+              }
+              if (next == null) return;
               _newOrderShown = true;
-              _shownOrderIds.add(order.id);
+              _shownOrderIds.add(next.id);
               Navigator.of(context).pushNamed(
                 '/new-order',
-                arguments: order,
+                arguments: next,
               ).then((result) {
                 _newOrderShown = false;
-                // Rechazar pops with the orderId — pin it so it's never
-                // re-offered to this courier this session.
+                // Rechazar/timeout pops with the orderId — pin it so it's not
+                // re-shown to this courier for the rest of the session.
                 if (result is String) _shownOrderIds.add(result);
               });
             },
@@ -190,24 +197,22 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _AvailableOrdersListener extends StatelessWidget {
-  final String courierUid;
-  final void Function(OrderModel) onOrder;
+  final void Function(List<OrderModel>) onOrders;
 
-  const _AvailableOrdersListener({
-    required this.courierUid,
-    required this.onOrder,
-  });
+  const _AvailableOrdersListener({required this.onOrders});
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<OrderModel>>(
-      stream: OrderService.streamMyOffers(courierUid),
+      stream: OrderService.streamAvailable(),
       builder: (context, snap) {
         final list = snap.data ?? const [];
         if (list.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
+            // Only surface the popup while Home is the topmost route, so we
+            // never stack it over the order-detail / workflow screens.
             if (ModalRoute.of(context)?.isCurrent ?? false) {
-              onOrder(list.first);
+              onOrders(list);
             }
           });
         }

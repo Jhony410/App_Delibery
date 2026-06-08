@@ -16,30 +16,30 @@ class NewOrderScreen extends StatefulWidget {
 
 class _NewOrderScreenState extends State<NewOrderScreen>
     with SingleTickerProviderStateMixin {
-  // Offer window length, used only as the progress-ring denominator. The actual
-  // countdown is derived from the server's assignmentExpiresAt so it stays
-  // correct even if the app was briefly backgrounded.
+  // Offer window length: the countdown denominator and, in the broadcast model,
+  // the actual time the courier has to accept.
   static const _windowSeconds = 30;
   late int _secondsLeft;
+  // Absolute moment this offer lapses. Uses the server's expiry when one is set
+  // (legacy dispatcher field); otherwise a local window from when the popup
+  // opened, so the countdown always advances even without a server timestamp.
+  late final DateTime _deadline;
   Timer? _timer;
   StreamSubscription<OrderModel?>? _statusSub;
   bool _accepting = false;
   bool _releasing = false;
 
-  String? get _uid => AuthService.currentUid;
-
-  /// Whole seconds until this offer lapses, from the server timestamp. Falls
-  /// back to the full window if the order arrived without an expiry set.
+  /// Whole seconds until this offer lapses, derived from [_deadline].
   int _remainingSeconds() {
-    final expiresAt = widget.order.assignmentExpiresAt;
-    if (expiresAt == null) return _windowSeconds;
-    final diff = expiresAt.difference(DateTime.now()).inMilliseconds;
+    final diff = _deadline.difference(DateTime.now()).inMilliseconds;
     return (diff / 1000).ceil().clamp(0, _windowSeconds);
   }
 
   @override
   void initState() {
     super.initState();
+    _deadline = widget.order.assignmentExpiresAt ??
+        DateTime.now().add(const Duration(seconds: _windowSeconds));
     _secondsLeft = _remainingSeconds();
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return;
@@ -50,15 +50,15 @@ class _NewOrderScreenState extends State<NewOrderScreen>
       }
     });
 
-    // Auto-dismiss: watch this order's document. Close the popup if the offer is
-    // no longer ours — another courier accepted it, it was cancelled/deleted, or
-    // the dispatcher rotated the offer to someone else (assignedCourierId moved).
+    // Auto-dismiss: watch this order's document. Close the popup if the order is
+    // no longer up for grabs — another courier claimed it (courierId set) or it
+    // was cancelled/deleted.
     _statusSub = OrderService.streamOrder(widget.order.id).listen((order) {
       if (!mounted || _accepting || _releasing) return;
-      final stillMine = order != null &&
-          order.status == 'confirmed' &&
-          order.assignedCourierId == _uid;
-      if (!stillMine) {
+      final stillAvailable = order != null &&
+          order.courierId == null &&
+          (order.status == 'confirmed' || order.status == 'preparing');
+      if (!stillAvailable) {
         _timer?.cancel();
         Navigator.of(context).maybePop();
       }
@@ -111,21 +111,15 @@ class _NewOrderScreenState extends State<NewOrderScreen>
   /// like a rejection so the dispatcher rotates to the next courier.
   void _onTimeout() => _release();
 
-  /// Release this courier's offer (reject or timeout): record the rejection and
-  /// clear the offer so the Cloud Function offers the order to the next courier.
-  /// Guarded so the timeout path and a manual reject can't both fire.
-  Future<void> _release() async {
+  /// Dismiss this offer (reject or timeout). In the broadcast model the order
+  /// stays available to other couriers, so there's no Firestore write — we just
+  /// close the popup and return the id so HomeScreen pins it in _shownOrderIds
+  /// and never re-shows it to this courier for the rest of the session. Guarded
+  /// so the timeout path and a manual reject can't both fire.
+  void _release() {
     if (_releasing || _accepting) return;
     _releasing = true;
-    // Cancel timer + status watcher up front, before the async write, so
-    // neither can fire during the gap or after the popup is gone.
     _cancelListeners();
-    final uid = _uid;
-    if (uid != null) {
-      await OrderService.releaseOffer(widget.order.id, uid);
-    }
-    // Return the id so HomeScreen pins it in _shownOrderIds and never
-    // re-shows it to this courier for the rest of the session.
     if (mounted) Navigator.of(context).maybePop(widget.order.id);
   }
 
