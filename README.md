@@ -4,7 +4,7 @@
 
 ## 🎞️ Video Demo
 
-🔗 [Ver video en YouTube](https://www.youtube.com/watch?v=8FPL-2uPytY)
+🔗 [Ver video en YouTube](https://youtu.be/2OELW3O6C6o?si=vJHffcHzA3hQCi6m)
 ---
 
 ## 📖 Descripción
