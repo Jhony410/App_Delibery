@@ -4,14 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Workspace layout
 
-This directory holds **two sibling Flutter apps** that share one Firebase project (`delypuno-ddd2d`):
+This directory holds **three sibling Flutter apps plus a Cloud Functions backend** that share one Firebase project (`delypuno-ddd2d`):
 
 | Folder | App | Status |
 |---|---|---|
-| `app_delivery_usuario/` | DeliPuno — customer app (orders food, tracks delivery) | **Read-only.** Do not modify any files inside. See `app_delivery_usuario/CLAUDE.md` for its architecture. |
-| `app_delivery_repartidor/` | Dely Repartidor — courier/driver app | Active project. All work happens here. |
+| `app_delivery_usuario/` | DeliPuno — customer app (orders food, tracks delivery) | Active. Modified in recent sessions (tracking screen with return-to-menu buttons). See `app_delivery_usuario/CLAUDE.md` for its architecture. |
+| `app_delivery_repartidor/` | Dely Repartidor — courier/driver app | Active project. Most work happens here. |
+| `app_delivery_administrator/` | Runa Admin Panel — admin app (Flutter Web) | Active. Order management, reassignment, courier/store approval. |
+| `functions/` | Cloud Functions (Node.js, Firebase Admin SDK) | Active. Round-robin courier dispatch logic. |
 
-The two apps are **independent Dart packages** (not a monorepo with shared code) — they only share the Firestore database. The courier app duplicates models like `OrderModel` locally rather than importing from the user app, so each app can evolve independently.
+Additional shared files at the workspace root: `firestore.rules` (Firestore security rules) and `firestore.indexes.json` (Firestore indexes).
+
+The three apps are **independent Dart packages** (not a monorepo with shared code) — they only share the Firestore database. The courier app duplicates models like `OrderModel` locally rather than importing from the user app, so each app can evolve independently.
 
 A third folder `D:\Aplication Delibery-handoff-repartidor\` (sibling to this workspace) holds the source design files (`.jsx` mockups) the courier app was built from. Useful when adding new screens or matching pixel details.
 
@@ -45,12 +49,12 @@ PowerShell is the default shell (Windows 11). When chaining commands, use `;` th
   → /home (MainShell — bottom nav: Home / Pedidos / Billetera / Perfil)
 
 Delivery workflow (sequential, each screen mutates order.status):
-  /new-order (modal, 15s timer)
+  /new-order (modal, 30s timer)
     → accept → /order-detail
     → /route-store → /pickup → /route-customer → /deliver → /completed
 ```
 
-`HomeScreen` watches `OrderService.streamAvailable()` only when the courier toggles online. When orders appear, it auto-pushes `/new-order` with the first available order.
+`HomeScreen` watches for orders where `assignedCourierId == uid` of the logged-in courier (the order assigned to it by the Cloud Function), only while the courier is toggled online. When such an order appears, it auto-pushes `/new-order` with it. The courier no longer pulls from a broadcast `streamAvailable()` — assignment is driven server-side by `offerToNextCourier` (see Cloud Functions).
 
 ### Order status state machine
 
@@ -60,6 +64,14 @@ The `orders/` collection is shared with the user app. The courier app **extends*
 pending → confirmed → preparing  ← user app writes these
        ↓
    accepted → picked_up → en_camino → entregado | cancelado  ← courier app writes these
+```
+
+Assignment is no longer broadcast. A Cloud Function (`offerToNextCourier`) offers each order to one online courier at a time via these `orders/{orderId}` fields:
+
+```
+assignedCourierId    ← courier the order is currently offered to
+assignmentExpiresAt  ← timestamp the offer expires (30s window)
+rejectedCouriers     ← list of couriers who rejected or let the offer expire
 ```
 
 `OrderService.acceptOrder()` uses a Firestore transaction to atomically claim an order — only succeeds if `courierId` is null. This prevents two couriers from grabbing the same order. Always go through this method, not a plain `update`.
@@ -87,12 +99,25 @@ Courier-specific fields on orders: `courierId`, `acceptedAt`, `pickedUpAt`, `del
 - `CourierService` — profile streaming, online toggle, delivery counter increment.
 - `OrderService` — order streams (`streamAvailable`, `streamForCourier`, `streamActiveForCourier`), atomic `acceptOrder`, status transitions.
 
+## Cloud Functions
+
+Logic lives in `functions/index.js` (Node.js, Firebase Admin SDK). It does **not** use FCM — the mechanism is Firestore-as-bus.
+
+Main functions:
+- `offerToNextCourier(orderRef)`: assigns the order to the next online courier in round-robin rotation. Restarts the cycle if everyone rejected (continuous rotation).
+- `offerOrderOnCreate` (onCreate trigger): fires the first offer when an order is created.
+- `offerOrderOnReleased` (onUpdate trigger): rotates to the next courier when an order is rejected, expires, or is reassigned manually. Only fires on the false→true edge of the `needsCourier` predicate.
+- `reclaimExpiredOffers` (scheduled, every 1 min): releases expired offers when the courier didn't respond (app closed).
+
+Deploy: `firebase deploy --only functions` (from the workspace root, not from `functions/`).
+
 ## Firebase config
 
 Both apps use the same Firebase project (`delypuno-ddd2d`). The courier app's Android package `com.example.app_delivery_repartidor` was added to `google-services.json` reusing the existing `mobilesdk_app_id`. **For production releases**, register the courier package properly via `flutterfire configure` to issue a real Android app ID — the current setup is fine for development but not for App Store/Play Store distribution.
 
 ## Constraints
 
-- **Never modify `app_delivery_usuario/`.** Its UI and Firestore writes are considered the source of truth for the customer side. If a contract change is needed, document it but do not edit.
 - The courier app is **self-contained**: don't import from `../app_delivery_usuario/lib/`. If logic genuinely needs to be shared, copy it (the duplication is intentional).
+- **Never write the `assignedCourierId` / `assignmentExpiresAt` / `rejectedCouriers` fields directly from Flutter.** These are managed exclusively by `functions/index.js`. Writing them from a client breaks the round-robin invariant.
+- The admin's **Reasignar** button writes to Firestore directly (`order_service.dart` `reassign()`). That write indirectly triggers `offerOrderOnReleased`, which rotates to the next courier. Do not create an alternative path for reassignment.
 - `flutter analyze` must stay clean — no warnings, no info-level lints. The repo currently reports zero issues.

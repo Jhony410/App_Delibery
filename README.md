@@ -28,6 +28,7 @@ Ofrecer una solución completa de delivery local que permita:
 | Lenguaje | **Dart** (Flutter 3.11+) |
 | Framework UI | **Flutter** (Material 3) |
 | Backend | **Firebase** — Auth + Cloud Firestore |
+| Backend extra | Cloud Functions (Node.js 18, Firebase Admin SDK) |
 | Tipografía | Plus Jakarta Sans (`google_fonts`) |
 | Plataformas | Android, iOS y Flutter Web |
 | Estado | `StatefulWidget` / `setState` (sin librerías externas) |
@@ -42,7 +43,10 @@ El repositorio aloja **tres apps Flutter independientes** que comparten un únic
 Aplicacion Delibery Puno/
 ├── app_delivery_usuario/         → DeliPuno (cliente)
 ├── app_delivery_repartidor/      → Dely Repartidor (courier)
-└── app_delivery_administrator/   → Runa Admin Panel (web)
+├── app_delivery_administrator/   → Runa Admin Panel (web)
+├── functions/                    → Cloud Functions (round-robin dispatch)
+├── firestore.rules               → reglas de seguridad Firestore
+└── firestore.indexes.json        → índices Firestore
 ```
 
 Cada app es un paquete Dart autónomo. **No comparten código**: los modelos como `OrderModel` se duplican intencionalmente en cada proyecto para que evolucionen de forma aislada. Lo único compartido es la **base de datos Firestore**.
@@ -65,10 +69,15 @@ tickets/{ticketId}                ← soporte
 ```
 pending → confirmed → preparing            (escritos por la app cliente)
        ↓
-   accepted → picked_up → en_camino        (escritos por la app repartidor)
-       ↓
-   entregado | cancelado
+   confirmed (con asignación round-robin vía Cloud Function)
+       ├─ [assignedCourierId=uid, assignmentExpiresAt=+30s]
+       │     ↓ acepta
+       └─ accepted → picked_up → en_camino  (escritos por la app repartidor)
+                                 ↓
+                          entregado | cancelado
 ```
+
+Los campos `assignedCourierId`, `assignmentExpiresAt` y `rejectedCouriers` los gestiona exclusivamente Cloud Functions (`functions/index.js`); las apps Flutter nunca los escriben directamente.
 
 ---
 
@@ -84,6 +93,8 @@ App móvil para usuarios finales (Android/iOS, vertical, tema claro).
 - Carrito de compras y selección de direcciones.
 - Checkout con resumen y método de pago.
 - Tracking en tiempo real del pedido.
+- Visualización del repartidor asignado en tiempo real durante el tracking.
+- Botón de retorno rápido al menú principal desde pantalla de pedido cancelado o entregado.
 - Calificación post-entrega e historial de pedidos.
 
 ### 🟡 Dely Repartidor — App Courier (`app_delivery_repartidor/`)
@@ -93,7 +104,7 @@ App móvil para repartidores (Android/iOS, vertical, tema oscuro).
 **Funcionalidades:**
 - Registro de repartidor con verificación administrativa.
 - Toggle online/offline para recibir pedidos.
-- Recepción de pedidos disponibles con temporizador de aceptación (15 s).
+- Recepción de pedidos vía asignación round-robin (Cloud Functions) con temporizador de aceptación (30 s).
 - Flujo guiado: ruta a tienda → recojo → ruta al cliente → entrega.
 - Aceptación atómica de pedidos vía transacción Firestore (evita doble asignación).
 - Billetera con historial de ganancias y perfil de courier.
@@ -105,6 +116,7 @@ Panel de administración (Flutter Web, tema claro estilo Stripe/Linear).
 **Funcionalidades:**
 - Dashboard con métricas clave y gráficos de ventas.
 - Gestión de pedidos: cancelar, reasignar, ver detalle.
+- Reasignación de repartidor con reinicio automático del ciclo round-robin.
 - Mapa en vivo de pedidos y repartidores.
 - Aprobación/rechazo de repartidores y tiendas.
 - Gestión de clientes, zonas, precios y promociones.
@@ -194,9 +206,10 @@ lib/
 
 | App | Estado |
 |---|---|
-| 🟠 Cliente | ✅ Funcional — flujo completo de pedido |
-| 🟡 Repartidor | ✅ Funcional — flujo completo de entrega con aceptación atómica |
-| 🔵 Admin | ✅ Funcional — todas las secciones visibles, mapas y gráficos como `CustomPainter` |
+| 🟠 Cliente | ✅ Funcional — tracking con repartidor asignado visible y botones de retorno |
+| 🟡 Repartidor | ✅ Funcional — round-robin 30s, asignación vía Cloud Functions |
+| 🔵 Admin | ✅ Funcional — reasignación con reinicio de cola round-robin |
+| ⚙️ Functions | ✅ Deployada — round-robin continuo, reclaim automático cada 1 min |
 
 El sistema funciona end-to-end en desarrollo. Las tres apps están conectadas a la misma instancia Firestore y operan en tiempo real.
 
@@ -207,7 +220,8 @@ El sistema funciona end-to-end en desarrollo. Las tres apps están conectadas a 
 - Integración real con **Google Maps** (`google_maps_flutter`) en lugar de mapas pintados con `CustomPainter`.
 - Reemplazar los gráficos placeholder por una librería real (`fl_chart`, `syncfusion_flutter_charts`).
 - Pasarela de pagos integrada (Culqi, MercadoPago, Yape).
-- Notificaciones push con **Firebase Cloud Messaging**.
+- Push notifications (FCM) para despertar la app del repartidor cuando tiene un pedido asignado con la app cerrada. Actualmente el sistema es Firestore-as-bus: solo funciona con la app en primer plano.
+- Reducir la ventana de `reclaimExpiredOffers` de 1 minuto a eventos on-demand para respuesta más rápida en timeout de couriers.
 - Reglas de seguridad robustas en Firestore para producción.
 - Registro de cada app en Firebase como aplicación independiente vía `flutterfire configure` (actualmente comparten el `mobilesdk_app_id`).
 - Internacionalización (es/en/qu).
