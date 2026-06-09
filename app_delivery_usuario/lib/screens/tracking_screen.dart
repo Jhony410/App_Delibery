@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../models/order_model.dart';
 import '../services/db_service.dart';
+import '../widgets.dart';
 
 class TrackingScreen extends StatefulWidget {
   const TrackingScreen({super.key});
@@ -45,6 +46,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         'picked_up' => 'Pedido recogido',
         'en_camino' => 'En camino · aprox. 12 min',
         'entregado' => '¡Entregado!',
+        'cancelado' => 'Pedido cancelado',
         _ => 'Procesando...',
       };
 
@@ -64,6 +66,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         final status = order?.status ?? 'confirmed';
         final active = _activeStep(status);
         final isDelivered = status == 'entregado';
+        final isCancelled = status == 'cancelado';
         final shortId = (_orderId ?? '').length > 6
             ? _orderId!.substring(_orderId!.length - 6).toUpperCase()
             : (_orderId ?? '------').toUpperCase();
@@ -257,8 +260,31 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
                         const SizedBox(height: 16),
 
-                        // Banner de estado activo / entregado
-                        if (isDelivered)
+                        // Banner de estado: cancelado / entregado / activo.
+                        // Para 'cancelado' NO se muestra la simulación animada.
+                        if (isCancelled)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            decoration: BoxDecoration(
+                              color: AppColors.danger.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.cancel,
+                                    size: 18, color: AppColors.danger),
+                                SizedBox(width: 8),
+                                Text('Este pedido fue cancelado',
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.danger)),
+                              ],
+                            ),
+                          )
+                        else if (isDelivered)
                           Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(vertical: 13),
@@ -308,37 +334,67 @@ class _TrackingScreenState extends State<TrackingScreen> {
                             ),
                           ),
 
+                        // Una vez el pedido termina (entregado o cancelado) no
+                        // hay nada más que seguir: ofrecer volver al menú,
+                        // limpiando todo el stack de navegación.
+                        if (isDelivered || isCancelled) ...[
+                          const SizedBox(height: 12),
+                          AppButton(
+                            label: 'Volver al inicio',
+                            leading: const Icon(Icons.home_rounded,
+                                size: 20, color: Colors.white),
+                            onTap: () => Navigator.of(context)
+                                .pushNamedAndRemoveUntil(
+                                    '/home', (route) => false),
+                          ),
+                        ],
+
                         const SizedBox(height: 16),
 
-                        // Repartidor card — bound to couriers/{courierId} in
-                        // real time; placeholder until a courier is locked in.
-                        // Mirrors the admin panel: a courier is considered
-                        // assigned once they accept (courierId set) OR the order
-                        // has progressed past acceptance. We resolve the id from
-                        // courierId, falling back to the round-robin
-                        // assignedCourierId so legacy/edge orders still show the
-                        // driver instead of "Buscando repartidor".
+                        // Repartidor card. Shows the driver as soon as the order
+                        // carries any courier reference: courierName (written on
+                        // accept), a courierId/assignedCourierId, or a status
+                        // past acceptance. The name comes from courierName when
+                        // present; otherwise we stream couriers/{id} for the full
+                        // details (vehicle, rating). Placeholder ("Buscando
+                        // repartidor") only while no courier is known yet.
                         Builder(builder: (context) {
-                          final hasCourier = order != null &&
-                              (order.courierId != null ||
-                                  const [
-                                    'accepted',
-                                    'picked_up',
-                                    'en_camino',
-                                    'entregado',
-                                  ].contains(order.status));
-                          final courierId =
-                              order?.courierId ?? order?.assignedCourierId;
-                          if (!hasCourier || courierId == null) {
+                          final o = order;
+                          if (o == null) {
                             return const _CourierCard(
                                 courier: null, assigned: false);
+                          }
+                          final name = o.courierName;
+                          final hasName = name != null && name.isNotEmpty;
+                          final courierId = o.courierId ?? o.assignedCourierId;
+                          final hasCourier = hasName ||
+                              courierId != null ||
+                              const [
+                                'accepted',
+                                'picked_up',
+                                'en_camino',
+                                'entregado',
+                              ].contains(o.status);
+                          if (!hasCourier) {
+                            return const _CourierCard(
+                                courier: null, assigned: false);
+                          }
+                          // No id to look up richer details: show the name alone.
+                          if (courierId == null) {
+                            return _CourierCard(
+                              courier: null,
+                              assigned: true,
+                              fallbackName: hasName ? name : 'Repartidor',
+                              orderId: o.id,
+                            );
                           }
                           return StreamBuilder<CourierInfo?>(
                             stream: DbService.streamCourier(courierId),
                             builder: (context, cs) => _CourierCard(
                               courier: cs.data,
                               assigned: true,
-                              orderId: order.id,
+                              fallbackName: hasName ? name : null,
+                              orderId: o.id,
                             ),
                           );
                         }),
@@ -562,19 +618,37 @@ class _MapPin extends StatelessWidget {
       );
 }
 
+/// Initials for an avatar from a free-form display name (e.g. "Juan Pérez" →
+/// "JP"). Falls back to "R" (repartidor) when the name is empty.
+String _initialsOf(String name) {
+  final parts =
+      name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+  if (parts.isEmpty) return 'R';
+  if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+  return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
+}
+
 class _CourierCard extends StatelessWidget {
   final CourierInfo? courier;
-  final bool assigned; // the order already has a courierId
+  final bool assigned; // the order already has a courier
+  final String? fallbackName; // order.courierName, shown until/unless the
+  // couriers/{id} doc loads (or when there is no id to look up at all)
   final String? orderId;
   const _CourierCard({
     required this.courier,
     required this.assigned,
+    this.fallbackName,
     this.orderId,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = courier;
+    final displayName = c?.name.isNotEmpty == true
+        ? c!.name
+        : (fallbackName != null && fallbackName!.isNotEmpty
+            ? fallbackName!
+            : 'Repartidor');
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -595,18 +669,11 @@ class _CourierCard extends StatelessWidget {
               child: !assigned
                   ? const Icon(Icons.person_search,
                       size: 22, color: AppColors.primary)
-                  : c == null
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: AppColors.primary),
-                        )
-                      : Text(c.initials,
-                          style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.primary)),
+                  : Text(c?.initials ?? _initialsOf(displayName),
+                      style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary)),
             ),
           ),
           const SizedBox(width: 12),
@@ -615,9 +682,7 @@ class _CourierCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  !assigned
-                      ? 'Buscando repartidor...'
-                      : (c?.name.isNotEmpty == true ? c!.name : 'Repartidor'),
+                  !assigned ? 'Buscando repartidor...' : displayName,
                   style: const TextStyle(
                       fontSize: 14, fontWeight: FontWeight.w700),
                 ),
@@ -663,9 +728,14 @@ class _CourierCard extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                         color: AppColors.secondary),
                   ),
-                ] else ...[
+                ] else if (!assigned) ...[
                   const SizedBox(height: 2),
                   const Text('Te asignaremos uno en breve',
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.textMuted)),
+                ] else ...[
+                  const SizedBox(height: 2),
+                  const Text('Repartidor asignado',
                       style: TextStyle(
                           fontSize: 12, color: AppColors.textMuted)),
                 ],

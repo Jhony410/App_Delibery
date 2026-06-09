@@ -13,8 +13,12 @@
  *                           courier rejected / timed out, or an admin retried).
  *   reclaimExpiredOffers  — scheduled backstop (every 1 min) that releases
  *                           offers whose 30s window lapsed without the offered
- *                           courier's app responding (e.g. app was closed), so
- *                           the round-robin keeps rotating.
+ *                           courier's app responding (e.g. app was closed) and
+ *                           re-offers any stranded order, so the round-robin
+ *                           keeps rotating (calls offerToNextCourier directly).
+ *   manualReassign        — HTTPS callable invoked by the admin "Reasignar"
+ *                           button: resets the rotation and re-offers directly
+ *                           (no reliance on the onUpdate trigger edge).
  *
  * Runs with the Firebase Admin SDK, so it bypasses Firestore security rules.
  */
@@ -268,11 +272,21 @@ exports.offerOrderOnReleased = functions.firestore
 
 // Backstop — Firebase scheduled functions cannot run faster than 1 minute, so
 // they cannot enforce the 30s window in real time. The courier app releases its
-// own lapsed offer immediately (OrderService.releaseOffer); this sweep only
-// catches offers stranded because the offered courier's app was backgrounded /
-// closed and never wrote back. Releasing the offer here (adding the courier to
-// rejectedCouriers + assignedCourierId -> null) re-fires Trigger B, which
-// rotates to the next courier (or back to the same lone courier).
+// own lapsed offer immediately (OrderService.releaseOffer); this sweep is the
+// safety net that keeps the round-robin turning no matter what.
+//
+// It scans every "confirmed" (unclaimed) order and, CRUCIALLY, re-offers by
+// calling offerToNextCourier DIRECTLY instead of relying on the onUpdate
+// false→true edge of needsCourier — that edge can be missed (e.g. an order
+// already sitting in needsCourier=true with no live offer because a previous
+// offer attempt failed, or the courier app released without the trigger
+// rotating). offerToNextCourier is transactional and idempotent, so calling it
+// when an offer is already live is a no-op.
+//
+// Two cases per confirmed/unclaimed order:
+//   • a live offer whose 30s window lapsed → record the courier as passed,
+//     clear the offer, and immediately rotate to the next courier;
+//   • no live offer at all (needsCourier, stranded) → (re)offer it.
 exports.reclaimExpiredOffers = functions.pubsub
   .schedule("every 1 minutes")
   .onRun(async () => {
@@ -280,25 +294,105 @@ exports.reclaimExpiredOffers = functions.pubsub
     const snap = await db
       .collection("orders")
       .where("status", "==", "confirmed")
-      .where("assignmentExpiresAt", "<=", now)
       .get();
 
-    let reclaimed = 0;
+    let reclaimed = 0; // lapsed offers rotated to the next courier
+    let renudged = 0; // stranded orders re-offered from scratch
     for (const doc of snap.docs) {
       const data = doc.data();
-      if (!data.assignedCourierId) continue; // already released — skip
-      await doc.ref.update({
-        rejectedCouriers: FieldValue.arrayUnion(data.assignedCourierId),
-        assignedCourierId: null,
-        assignmentExpiresAt: null,
-      });
-      reclaimed += 1;
+      if (data.courierId) continue; // already claimed — skip
+
+      if (data.assignedCourierId) {
+        // A courier is currently being offered this order. Only act once the
+        // 30s window has lapsed; otherwise leave the live offer alone.
+        const exp = data.assignmentExpiresAt;
+        const lapsed =
+          exp && typeof exp.toMillis === "function"
+            ? exp.toMillis() <= now.toMillis()
+            : false;
+        if (!lapsed) continue;
+        await doc.ref.update({
+          rejectedCouriers: FieldValue.arrayUnion(data.assignedCourierId),
+          assignedCourierId: null,
+          assignmentExpiresAt: null,
+        });
+        // Rotate directly — do NOT depend on offerOrderOnReleased's edge.
+        await offerToNextCourier(doc.ref);
+        reclaimed += 1;
+      } else {
+        // Confirmed, unclaimed, and no live offer → it "needs a courier" but is
+        // stranded. Re-offer it directly.
+        await offerToNextCourier(doc.ref);
+        renudged += 1;
+      }
     }
 
-    if (reclaimed > 0) {
+    if (reclaimed > 0 || renudged > 0) {
       functions.logger.info(
-        `reclaimExpiredOffers: released ${reclaimed} stranded offer(s).`
+        `reclaimExpiredOffers: rotated ${reclaimed} lapsed offer(s), ` +
+          `re-offered ${renudged} stranded order(s).`
       );
     }
     return null;
   });
+
+// ─────────────────────────────────────────────────────────────────────────
+// Manual reassignment (admin "Reasignar repartidor")
+//
+// The admin used to write the reset fields straight to Firestore and hope the
+// onUpdate false→true edge of needsCourier re-fired the dispatcher. That edge
+// is fragile: if the order was ALREADY in needsCourier=true (e.g. a prior
+// timeout that never got reclaimed), the write doesn't cross the edge and no
+// offer is made. This callable removes that dependency: it resets the rotation
+// and then calls offerToNextCourier DIRECTLY, so a courier is always (re)offered
+// from the start of the queue. Runs with the Admin SDK (bypasses rules), so we
+// gate it on the caller being a signed-in admin (admins/{uid}).
+// ─────────────────────────────────────────────────────────────────────────
+exports.manualReassign = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "Debes iniciar sesión."
+    );
+  }
+  const adminDoc = await db.collection("admins").doc(context.auth.uid).get();
+  if (!adminDoc.exists) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Solo administradores pueden reasignar."
+    );
+  }
+
+  const orderId = data && data.orderId;
+  if (!orderId || typeof orderId !== "string") {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Falta orderId."
+    );
+  }
+
+  const orderRef = db.collection("orders").doc(orderId);
+  const snap = await orderRef.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError("not-found", "Pedido no encontrado.");
+  }
+
+  // Restart the round-robin from the beginning of the queue: drop any claimed /
+  // offered courier and the whole rejection history, back to "confirmed".
+  await orderRef.update({
+    courierId: null,
+    courierName: null,
+    status: "confirmed",
+    assignedCourierId: null,
+    assignmentExpiresAt: null,
+    rejectedCouriers: [],
+  });
+
+  // Offer immediately and directly — independent of the onUpdate edge.
+  await offerToNextCourier(orderRef);
+
+  functions.logger.info(
+    `manualReassign: ${orderId} reset and re-offered by ${context.auth.uid}.`
+  );
+  return { ok: true };
+});

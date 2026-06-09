@@ -85,7 +85,7 @@ class _OrderDetailBody extends StatelessWidget {
             label: 'Reasignar repartidor',
             variant: AdminBtnVariant.secondary,
             size: AdminBtnSize.sm,
-            onPressed: () => OrderService.reassign(order.id),
+            onPressed: () => _reassign(context),
           ),
         if (!isCancelled)
           AdminButton(
@@ -206,6 +206,23 @@ class _OrderDetailBody extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _reassign(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await OrderService.reassign(order.id);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Reasignando… se ofreció al repartidor.')),
+      );
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo reasignar el pedido. Intenta de nuevo.'),
+          backgroundColor: AdminColors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _confirmDelete(BuildContext context) async {

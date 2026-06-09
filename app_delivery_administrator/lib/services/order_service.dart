@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../models/order_model.dart';
 
@@ -55,19 +56,20 @@ class OrderService {
     return _col.doc(id).delete();
   }
 
-  /// Restarts round-robin dispatch from the beginning. Clears any assigned
-  /// courier and the whole rejection history, and moves the order back to
-  /// 'confirmed' so the Cloud Function's onUpdate trigger re-offers it to the
-  /// first eligible courier. Used both to retry a 'sin_repartidor' order and to
-  /// force a reassignment while still searching.
-  static Future<void> reassign(String id) {
-    return _col.doc(id).update({
-      'courierId': null,
-      'courierName': null,
-      'status': 'confirmed',
-      'assignedCourierId': null,
-      'assignmentExpiresAt': null,
-      'rejectedCouriers': <String>[],
-    });
+  /// Restarts round-robin dispatch from the beginning of the queue. Invokes the
+  /// `manualReassign` Cloud Function, which resets the rotation (clears the
+  /// assigned courier + the whole rejection history, back to 'confirmed') AND
+  /// immediately re-offers the order by calling the dispatcher directly.
+  ///
+  /// We call the function rather than writing to Firestore directly because the
+  /// old direct write relied on the onUpdate false→true edge of `needsCourier`
+  /// to re-trigger dispatch — and that edge is missed when the order is already
+  /// in the "needs a courier" state (e.g. after an unreclaimed timeout), so no
+  /// new offer was made. The callable removes that dependency. Used both to
+  /// retry a 'sin_repartidor' order and to force a reassignment while searching.
+  static Future<void> reassign(String id) async {
+    await FirebaseFunctions.instance
+        .httpsCallable('manualReassign')
+        .call(<String, dynamic>{'orderId': id});
   }
 }

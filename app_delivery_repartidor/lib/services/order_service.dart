@@ -76,6 +76,7 @@ class OrderService {
   /// status 'accepted'.
   static Future<bool> acceptOrder(String orderId, String courierId) async {
     final ref = _db.collection('orders').doc(orderId);
+    final courierRef = _db.collection('couriers').doc(courierId);
     return _db.runTransaction<bool>((tx) async {
       final snap = await tx.get(ref);
       if (!snap.exists) return false;
@@ -83,8 +84,14 @@ class OrderService {
       if (data['courierId'] != null) return false;
       final status = data['status'];
       if (status != 'confirmed' && status != 'preparing') return false;
+      // Read the courier's profile (all reads must precede writes in a txn) so
+      // the order carries the driver's name. This lets the user + admin panels
+      // show the repartidor directly, even after the order is delivered.
+      final courierSnap = await tx.get(courierRef);
+      final courierName = courierSnap.data()?['name'] as String?;
       tx.update(ref, {
         'courierId': courierId,
+        'courierName': courierName,
         'status': 'accepted',
         'acceptedAt': FieldValue.serverTimestamp(),
         // Clear the round-robin offer so the dispatcher stops rotating it and

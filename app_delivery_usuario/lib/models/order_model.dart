@@ -47,6 +47,10 @@ class OrderModel {
   final String paymentMethod;
   final String? observation;
   final String? courierId;
+  // Name of the courier handling the order, written by the courier app on
+  // accept. Lets the tracking card show the driver directly without a
+  // couriers/{id} lookup (and survives even if courierId is later cleared).
+  final String? courierName;
   // Round-robin offer field (owned by Cloud Functions): the courier currently
   // being offered the order while it is still 'confirmed'. Used as a fallback
   // to resolve the courier's identity for the tracking card.
@@ -68,6 +72,7 @@ class OrderModel {
     required this.paymentMethod,
     this.observation,
     this.courierId,
+    this.courierName,
     this.assignedCourierId,
     required this.createdAt,
   });
@@ -89,6 +94,7 @@ class OrderModel {
         paymentMethod: m['paymentMethod'],
         observation: m['observation'] as String?,
         courierId: m['courierId'] as String?,
+        courierName: m['courierName'] as String?,
         assignedCourierId: m['assignedCourierId'] as String?,
         createdAt: (m['createdAt'] as Timestamp).toDate(),
       );

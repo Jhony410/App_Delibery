@@ -3,7 +3,7 @@
   "description": "Cloud Functions for the DeliPuno delivery platform (delypuno-ddd2d)",
   "main": "index.js",
   "engines": {
-    "node": "18"
+    "node": "20"
   },
   "scripts": {
     "serve": "firebase emulators:start --only functions",
