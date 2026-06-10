@@ -73,8 +73,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         letterSpacing: 0.04)),
                 Row(
                   children: [
-                    Text('Av. Arequipa 2450, Lince',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                    Flexible(
+                      child: Text('Av. Arequipa 2450, Lince',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w700)),
+                    ),
                     Icon(Icons.keyboard_arrow_down, size: 16),
                   ],
                 ),
@@ -176,7 +181,8 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         children: [
           Container(
-            height: 140,
+            constraints: const BoxConstraints(minHeight: 140),
+            width: double.infinity,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               gradient: const LinearGradient(

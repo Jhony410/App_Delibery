@@ -213,11 +213,15 @@ class _OrdersTable extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                    'Mostrando ${orders.length} de $total pedidos',
-                    style: const TextStyle(
-                        fontSize: 12,
-                        color: AdminColors.textMuted)),
+                Flexible(
+                  child: Text(
+                      'Mostrando ${orders.length} de $total pedidos',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: AdminColors.textMuted)),
+                ),
                 Row(
                   children: [
                     _PageBtn(child: const Icon(Icons.chevron_left, size: 14)),
@@ -277,10 +281,14 @@ class _OrderRow extends StatelessWidget {
             Expanded(
                 flex: 3,
                 child: Text(order.customerName ?? '—',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 13))),
             Expanded(
                 flex: 3,
                 child: Text(order.storeName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                         fontSize: 13,
                         color: AdminColors.textMuted))),
@@ -303,6 +311,7 @@ class _OrderRow extends StatelessWidget {
                         Flexible(
                           child: Text(
                             order.courierName ?? 'Repartidor',
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),

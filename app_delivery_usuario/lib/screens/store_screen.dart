@@ -78,7 +78,10 @@ class _StoreScreenState extends State<StoreScreen> {
           backgroundColor: Colors.white,
           body: Stack(
             children: [
-              Column(
+              SingleChildScrollView(
+                padding: EdgeInsets.only(
+                    bottom: 120 + MediaQuery.of(context).padding.bottom),
+                child: Column(
                 children: [
                   Stack(
                     children: [
@@ -232,6 +235,7 @@ class _StoreScreenState extends State<StoreScreen> {
                     ),
                   ),
                 ],
+                ),
               ),
               if (CartService.itemCount > 0)
                 Positioned(
@@ -379,9 +383,13 @@ class _MenuItemRow extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(item.name,
-                          style: const TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w700)),
+                      Flexible(
+                        child: Text(item.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w700)),
+                      ),
                       if (item.badge != null) ...[
                         const SizedBox(width: 6),
                         Container(

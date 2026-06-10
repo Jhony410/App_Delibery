@@ -164,11 +164,16 @@ class _MetricGrid extends StatelessWidget {
                               fontSize: 12,
                               color: AdminColors.textMuted,
                               fontWeight: FontWeight.w500)),
-                      Text(m.value,
-                          style: GoogleFonts.plusJakartaSans(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.6)),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(m.value,
+                            maxLines: 1,
+                            style: GoogleFonts.plusJakartaSans(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.6)),
+                      ),
                     ],
                   ),
                 ))
@@ -190,19 +195,26 @@ class _SalesChart extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Ventas de la semana',
-                      style: GoogleFonts.plusJakartaSans(
-                          fontSize: 14, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  const Text('Últimos 7 días · S/ 287,420 total',
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: AdminColors.textMuted)),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Ventas de la semana',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(
+                            fontSize: 14, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    const Text('Últimos 7 días · S/ 287,420 total',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: AdminColors.textMuted)),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               const AdminPillToggle(
                   options: ['7d', '30d', '90d'], selectedIndex: 0),
             ],
@@ -614,6 +626,7 @@ class _Td extends StatelessWidget {
       child: Text(text,
           style: mono ? GoogleFonts.robotoMono(textStyle: style) : style,
           textAlign: align,
+          maxLines: 1,
           overflow: TextOverflow.ellipsis),
     );
   }

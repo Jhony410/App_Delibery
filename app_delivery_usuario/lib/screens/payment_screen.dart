@@ -150,7 +150,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                           height: 110,
                                           width: double.infinity,
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) =>
+                                          errorBuilder: (_, _, _) =>
                                               Container(
                                                 height: 110,
                                                 color: AppColors.bg,

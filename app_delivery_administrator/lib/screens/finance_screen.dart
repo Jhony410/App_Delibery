@@ -105,11 +105,16 @@ class _Metrics extends StatelessWidget {
                               color: AdminColors.textMuted,
                               fontWeight: FontWeight.w500)),
                       const SizedBox(height: 4),
-                      Text(m.$2,
-                          style: GoogleFonts.plusJakartaSans(
-                              fontSize: 26,
-                              fontWeight: FontWeight.w800,
-                              color: m.$4)),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(m.$2,
+                            maxLines: 1,
+                            style: GoogleFonts.plusJakartaSans(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                                color: m.$4)),
+                      ),
                       const SizedBox(height: 2),
                       Text(m.$3,
                           style: const TextStyle(
@@ -136,9 +141,13 @@ class _SalesBarChart extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Ventas y comisión por día',
-                  style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14, fontWeight: FontWeight.w700)),
+              Flexible(
+                child: Text('Ventas y comisión por día',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 14, fontWeight: FontWeight.w700)),
+              ),
               Row(
                 children: const [
                   _LegendDot(
@@ -275,10 +284,15 @@ class _CommissionByCategory extends StatelessWidget {
                           style: const TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w600)),
-                      Text('${r.$3} · ${(r.$2 * 100).toStringAsFixed(0)}%',
-                          style: const TextStyle(
-                              fontSize: 12.5,
-                              color: AdminColors.textMuted)),
+                      Flexible(
+                        child: Text(
+                            '${r.$3} · ${(r.$2 * 100).toStringAsFixed(0)}%',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 12.5,
+                                color: AdminColors.textMuted)),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -349,6 +363,8 @@ class _TopStores extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.only(left: 8),
                       child: Text(rows[i].$1,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                               fontWeight: FontWeight.w600)),
                     ),
@@ -356,6 +372,8 @@ class _TopStores extends StatelessWidget {
                   Expanded(
                     flex: 3,
                     child: Text(rows[i].$2,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                             color: AdminColors.textMuted)),
                   ),

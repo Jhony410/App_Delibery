@@ -44,7 +44,9 @@ class _LoginScreenState extends State<LoginScreen> {
   String _friendlyError(String e) {
     if (e.contains('invalid-credential') ||
         e.contains('user-not-found') ||
-        e.contains('wrong-password')) return 'Correo o contraseña incorrectos';
+        e.contains('wrong-password')) {
+      return 'Correo o contraseña incorrectos';
+    }
     if (e.contains('network')) return 'Sin conexión a internet';
     return 'Ocurrió un error, inténtalo de nuevo';
   }
@@ -105,12 +107,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: GestureDetector(
                   onTap: () async {
                     if (_email.text.trim().isEmpty) return;
+                    final messenger = ScaffoldMessenger.of(context);
                     await AuthService.sendPasswordReset(_email.text.trim());
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('Correo de recuperación enviado'),
-                      ));
-                    }
+                    messenger.showSnackBar(const SnackBar(
+                      content: Text('Correo de recuperación enviado'),
+                    ));
                   },
                   child: const Text(
                     '¿Olvidaste tu contraseña?',

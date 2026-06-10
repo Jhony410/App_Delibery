@@ -185,20 +185,28 @@ class _TrackingScreenState extends State<TrackingScreen> {
                           crossAxisAlignment: CrossAxisAlignment.baseline,
                           textBaseline: TextBaseline.alphabetic,
                           children: [
-                            snap.connectionState == ConnectionState.waiting
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: AppColors.primary))
-                                : Text(
-                                    _etaLabel(status),
-                                    style: const TextStyle(
-                                        fontSize: 19,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: -0.4),
-                                  ),
+                            Expanded(
+                              child: snap.connectionState ==
+                                      ConnectionState.waiting
+                                  ? const Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: SizedBox(
+                                          height: 20,
+                                          width: 20,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: AppColors.primary)))
+                                  : Text(
+                                      _etaLabel(status),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                          fontSize: 19,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.4),
+                                    ),
+                            ),
+                            const SizedBox(width: 8),
                             Text('#RN-$shortId',
                                 style: const TextStyle(
                                     fontSize: 12,

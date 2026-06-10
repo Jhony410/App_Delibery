@@ -31,7 +31,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> _signUp() async {
     if (_name.text.trim().isEmpty ||
         _email.text.trim().isEmpty ||
-        _pass.text.isEmpty) return;
+        _pass.text.isEmpty) {
+      return;
+    }
     if (!_terms) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Debes aceptar los términos y condiciones'),

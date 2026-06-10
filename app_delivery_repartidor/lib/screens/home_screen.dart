@@ -113,12 +113,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           const Icon(Icons.star_rounded,
                               size: 14, color: CourierColors.warning),
                           const SizedBox(width: 4),
-                          Text(
-                            '${(courier?.rating ?? 5.0).toStringAsFixed(1)} · ${courier?.totalDeliveries ?? 0} entregas',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: CourierColors.text,
+                          Flexible(
+                            child: Text(
+                              '${(courier?.rating ?? 5.0).toStringAsFixed(1)} · ${courier?.totalDeliveries ?? 0} entregas',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: CourierColors.text,
+                              ),
                             ),
                           ),
                         ],
@@ -523,13 +527,18 @@ class _SummaryCard extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: color),
           const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.4,
-              color: CourierColors.text,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.4,
+                color: CourierColors.text,
+              ),
             ),
           ),
           const SizedBox(height: 2),

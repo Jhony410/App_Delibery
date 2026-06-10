@@ -64,13 +64,19 @@ class CButton extends StatelessWidget {
                   Icon(icon, size: 22, color: fg),
                   const SizedBox(width: 10),
                 ],
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: fg,
-                    fontSize: fontSize,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.2,
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: fg,
+                        fontSize: fontSize,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
                   ),
                 ),
               ],
