@@ -1,23 +1,211 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/product_model.dart';
 import '../models/store_model.dart';
 import '../routes.dart';
+import '../services/store_service.dart';
 import '../theme.dart';
 import '../widgets/admin_shell.dart';
 import '../widgets/admin_widgets.dart';
 
-class StoreDetailScreen extends StatelessWidget {
+const _monthAbbr = [
+  'ene', 'feb', 'mar', 'abr', 'may', 'jun',
+  'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
+];
+
+String _fmtDate(DateTime d) =>
+    '${d.day} ${_monthAbbr[d.month - 1]} ${d.year}';
+
+String _money(double v) {
+  final neg = v < 0;
+  final s = v.abs().toStringAsFixed(0);
+  final b = StringBuffer();
+  for (var i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
+    b.write(s[i]);
+  }
+  return 'S/ ${neg ? '-' : ''}$b';
+}
+
+const _dayLabels = <String, String>{
+  'mon': 'Lunes',
+  'tue': 'Martes',
+  'wed': 'Miércoles',
+  'thu': 'Jueves',
+  'fri': 'Viernes',
+  'sat': 'Sábado',
+  'sun': 'Domingo',
+};
+
+class StoreDetailScreen extends StatefulWidget {
   final StoreModel? store;
   const StoreDetailScreen({super.key, this.store});
 
   @override
+  State<StoreDetailScreen> createState() => _StoreDetailScreenState();
+}
+
+class _StoreDetailScreenState extends State<StoreDetailScreen> {
+  static const _tabs = [
+    'General', 'Menú', 'Horarios', 'Comisión', 'Ventas', 'Documentos'
+  ];
+
+  late StoreModel _store;
+  int _tab = 0;
+
+  // General tab controllers
+  late final TextEditingController _name;
+  late final TextEditingController _ruc;
+  late final TextEditingController _category;
+  late final TextEditingController _district;
+  late final TextEditingController _address;
+  late final TextEditingController _phone;
+  late final TextEditingController _email;
+  late final TextEditingController _contacto;
+
+  bool _savingGeneral = false;
+  bool _togglingStatus = false;
+
+  Future<StoreMonthStats>? _statsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _store = widget.store ??
+        const StoreModel(
+          id: '',
+          name: '',
+          category: '',
+          categorySlug: '',
+          rating: 0,
+          reviewCount: 0,
+          deliveryTime: '',
+          deliveryFee: 0,
+          address: '',
+        );
+    _name = TextEditingController(text: _store.name);
+    _ruc = TextEditingController(text: _store.ruc ?? '');
+    _category = TextEditingController(text: _store.category);
+    _district = TextEditingController(text: _store.district ?? '');
+    _address = TextEditingController(text: _store.address);
+    _phone = TextEditingController(text: _store.phone ?? '');
+    _email = TextEditingController(text: _store.email ?? '');
+    _contacto = TextEditingController(text: _store.contacto ?? '');
+    if (_store.id.isNotEmpty) _refreshStats();
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _ruc.dispose();
+    _category.dispose();
+    _district.dispose();
+    _address.dispose();
+    _phone.dispose();
+    _email.dispose();
+    _contacto.dispose();
+    super.dispose();
+  }
+
+  void _refreshStats() {
+    setState(() {
+      _statsFuture =
+          StoreService.monthStats(_store.id, _store.commissionPct ?? 18);
+    });
+  }
+
+  void _snack(String msg, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: error ? AdminColors.red : null,
+    ));
+  }
+
+  Future<void> _saveGeneral() async {
+    if (_store.id.isEmpty) return;
+    setState(() => _savingGeneral = true);
+    final fields = {
+      'name': _name.text.trim(),
+      'ruc': _ruc.text.trim(),
+      'category': _category.text.trim(),
+      'district': _district.text.trim(),
+      'address': _address.text.trim(),
+      'phone': _phone.text.trim(),
+      'email': _email.text.trim(),
+      'contacto': _contacto.text.trim(),
+    };
+    try {
+      await StoreService.updateStore(_store.id, fields);
+      setState(() {
+        _store = _store.copyWith(
+          name: fields['name'],
+          ruc: fields['ruc'],
+          category: fields['category'],
+          district: fields['district'],
+          address: fields['address'],
+          phone: fields['phone'],
+          email: fields['email'],
+          contacto: fields['contacto'],
+        );
+        _savingGeneral = false;
+      });
+      _snack('Cambios guardados.');
+    } catch (e) {
+      setState(() => _savingGeneral = false);
+      _snack('No se pudo guardar: $e', error: true);
+    }
+  }
+
+  Future<void> _toggleStatus() async {
+    if (_store.id.isEmpty) return;
+    setState(() => _togglingStatus = true);
+    final next = !_store.activo;
+    try {
+      await StoreService.toggleStoreStatus(_store.id, next);
+      setState(() {
+        _store = _store.copyWith(activo: next);
+        _togglingStatus = false;
+      });
+      _snack(next ? 'Comercio reactivado.' : 'Comercio pausado.');
+    } catch (e) {
+      setState(() => _togglingStatus = false);
+      _snack('No se pudo cambiar el estado: $e', error: true);
+    }
+  }
+
+  Future<void> _saveCommission(double pct) async {
+    try {
+      await StoreService.updateCommission(_store.id, pct);
+      setState(() {
+        _store = _store.copyWith(
+            commissionPct: pct, commissionUpdatedAt: DateTime.now());
+      });
+      _refreshStats();
+      _snack('Comisión actualizada a ${pct.toStringAsFixed(0)}%.');
+    } catch (e) {
+      _snack('No se pudo actualizar la comisión: $e', error: true);
+    }
+  }
+
+  Future<void> _saveHorarios(Map<String, dynamic> horarios) async {
+    try {
+      await StoreService.updateStore(_store.id, {'horarios': horarios});
+      setState(() => _store = _store.copyWith(horarios: horarios));
+      _snack('Horarios guardados.');
+    } catch (e) {
+      _snack('No se pudieron guardar los horarios: $e', error: true);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (store == null) {
-      return AdminShell(
+    if (widget.store == null) {
+      return const AdminShell(
         activeId: 'comercios',
         title: 'Comercio',
-        child: const Center(
+        child: Center(
           child: Padding(
             padding: EdgeInsets.all(40),
             child: Text('Comercio no encontrado.'),
@@ -25,71 +213,110 @@ class StoreDetailScreen extends StatelessWidget {
         ),
       );
     }
-    final s = store!;
+    final s = _store;
     return AdminShell(
       activeId: 'comercios',
       title: s.name,
       actions: [
         AdminButton(
-            label: s.isOpen ? 'Pausar' : 'Reactivar',
-            variant: AdminBtnVariant.secondary,
-            size: AdminBtnSize.sm,
-            onPressed: () {}),
-        const AdminButton(
-            label: 'Guardar cambios', size: AdminBtnSize.sm),
+          label: s.activo ? 'Pausar' : 'Reactivar',
+          variant: AdminBtnVariant.secondary,
+          size: AdminBtnSize.sm,
+          loading: _togglingStatus,
+          onPressed: _toggleStatus,
+        ),
+        AdminButton(
+          label: 'Guardar cambios',
+          size: AdminBtnSize.sm,
+          loading: _savingGeneral,
+          onPressed: _tab == 0 ? _saveGeneral : null,
+        ),
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Breadcrumb(name: s.name, isOpen: s.isOpen),
+          _Breadcrumb(name: s.name, activo: s.activo),
           const SizedBox(height: 20),
-          _Tabs(),
+          _TabsBar(
+            tabs: _tabs,
+            index: _tab,
+            onTap: (i) => setState(() => _tab = i),
+          ),
           const SizedBox(height: 20),
-          LayoutBuilder(builder: (context, c) {
-            final twoCol = c.maxWidth > 1100;
-            final main = Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _GeneralInfoCard(store: s),
-                const SizedBox(height: 16),
-                _HoursCard(),
-                const SizedBox(height: 16),
-                _SalesBarCard(),
-              ],
-            );
-            final side = Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _CommissionCard(pct: s.commissionPct ?? 18),
-                const SizedBox(height: 16),
-                _MonthSummaryCard(),
-                const SizedBox(height: 16),
-                _ActionsCard(),
-              ],
-            );
-            if (!twoCol) {
-              return Column(
-                  children: [main, const SizedBox(height: 16), side]);
-            }
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: main),
-                const SizedBox(width: 20),
-                SizedBox(width: 320, child: side),
-              ],
-            );
-          }),
+          _buildTab(),
         ],
       ),
     );
+  }
+
+  Widget _buildTab() {
+    switch (_tab) {
+      case 0:
+        return _generalLayout();
+      case 1:
+        return _MenuTab(storeId: _store.id, onSnack: _snack);
+      case 2:
+        return _HorariosTab(
+            horarios: _store.horarios, onSave: _saveHorarios);
+      case 3:
+        return _ComisionTab(store: _store, onSave: _saveCommission);
+      case 4:
+        return _VentasTab(statsFuture: _statsFuture);
+      default:
+        return const _DocumentosTab();
+    }
+  }
+
+  Widget _generalLayout() {
+    return LayoutBuilder(builder: (context, c) {
+      final twoCol = c.maxWidth > 1100;
+      final main = _GeneralForm(
+        name: _name,
+        ruc: _ruc,
+        category: _category,
+        district: _district,
+        address: _address,
+        phone: _phone,
+        email: _email,
+        contacto: _contacto,
+        saving: _savingGeneral,
+        onSave: _saveGeneral,
+        activo: _store.activo,
+        toggling: _togglingStatus,
+        onToggle: _toggleStatus,
+      );
+      final side = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _CommissionMiniCard(
+            pct: _store.commissionPct ?? 18,
+            updatedAt: _store.commissionUpdatedAt,
+            onEdit: () => setState(() => _tab = 3),
+          ),
+          const SizedBox(height: 16),
+          _MonthSummaryCard(
+              statsFuture: _statsFuture, rating: _store.rating),
+        ],
+      );
+      if (!twoCol) {
+        return Column(children: [main, const SizedBox(height: 16), side]);
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: main),
+          const SizedBox(width: 20),
+          SizedBox(width: 320, child: side),
+        ],
+      );
+    });
   }
 }
 
 class _Breadcrumb extends StatelessWidget {
   final String name;
-  final bool isOpen;
-  const _Breadcrumb({required this.name, required this.isOpen});
+  final bool activo;
+  const _Breadcrumb({required this.name, required this.activo});
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -106,207 +333,155 @@ class _Breadcrumb extends StatelessWidget {
           child: Icon(Icons.chevron_right,
               size: 12, color: AdminColors.textMuted),
         ),
-        Text(name,
-            style: const TextStyle(
-                fontSize: 12.5, fontWeight: FontWeight.w600)),
+        Flexible(
+          child: Text(name,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 12.5, fontWeight: FontWeight.w600)),
+        ),
         const SizedBox(width: 10),
-        AdminBadge(isOpen ? 'Activo' : 'Pausado',
-            tone: isOpen ? 'green' : 'amber'),
+        AdminBadge(activo ? 'Activo' : 'Pausado',
+            tone: activo ? 'green' : 'amber'),
       ],
     );
   }
 }
 
-class _Tabs extends StatelessWidget {
-  static const _tabs = [
-    'General',
-    'Menú',
-    'Horarios',
-    'Comisión',
-    'Ventas',
-    'Documentos'
-  ];
+class _TabsBar extends StatelessWidget {
+  final List<String> tabs;
+  final int index;
+  final ValueChanged<int> onTap;
+  const _TabsBar(
+      {required this.tabs, required this.index, required this.onTap});
+
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: AdminColors.border)),
       ),
-      child: Row(
-        children: [
-          for (int i = 0; i < _tabs.length; i++)
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: i == 0
-                        ? AdminColors.text
-                        : Colors.transparent,
-                    width: 2,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (int i = 0; i < tabs.length; i++)
+              InkWell(
+                onTap: () => onTap(i),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: i == index
+                            ? AdminColors.text
+                            : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    tabs[i],
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: i == index
+                          ? AdminColors.text
+                          : AdminColors.textMuted,
+                    ),
                   ),
                 ),
               ),
-              child: Text(
-                _tabs[i],
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color:
-                      i == 0 ? AdminColors.text : AdminColors.textMuted,
-                ),
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _GeneralInfoCard extends StatelessWidget {
-  final StoreModel store;
-  const _GeneralInfoCard({required this.store});
+/// ─── General tab ───────────────────────────────────────────────────
+class _GeneralForm extends StatelessWidget {
+  final TextEditingController name, ruc, category, district, address, phone,
+      email, contacto;
+  final bool saving;
+  final VoidCallback onSave;
+  final bool activo;
+  final bool toggling;
+  final VoidCallback onToggle;
+
+  const _GeneralForm({
+    required this.name,
+    required this.ruc,
+    required this.category,
+    required this.district,
+    required this.address,
+    required this.phone,
+    required this.email,
+    required this.contacto,
+    required this.saving,
+    required this.onSave,
+    required this.activo,
+    required this.toggling,
+    required this.onToggle,
+  });
+
   @override
   Widget build(BuildContext context) {
-    final fields = [
-      ('Razón social', store.name),
-      ('RUC', '20512345678'),
-      ('Categoría', store.category),
-      ('Distrito', store.district ?? '—'),
-      ('Dirección', store.address),
-      ('Teléfono', store.phone ?? '—'),
-      ('Email', 'contacto@${store.categorySlug}.pe'),
-      ('Contacto', 'Roberto Morales (Gerente)'),
+    final fields = <(String, TextEditingController)>[
+      ('Razón social', name),
+      ('RUC', ruc),
+      ('Categoría', category),
+      ('Distrito', district),
+      ('Dirección', address),
+      ('Teléfono', phone),
+      ('Email', email),
+      ('Contacto', contacto),
     ];
     return AdminCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Información general',
-              style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13.5, fontWeight: FontWeight.w700)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Información general',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13.5, fontWeight: FontWeight.w700)),
+              AdminButton(
+                label: activo ? 'Pausar' : 'Activar',
+                icon: activo ? Icons.pause : Icons.play_arrow,
+                variant: AdminBtnVariant.secondary,
+                size: AdminBtnSize.sm,
+                loading: toggling,
+                onPressed: onToggle,
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           LayoutBuilder(builder: (context, c) {
+            final colW = (c.maxWidth - 14) / 2;
             return Wrap(
               spacing: 14,
               runSpacing: 14,
-              children: fields.map((f) {
-                return SizedBox(
-                  width: (c.maxWidth - 14) / 2,
-                  child: AdminReadOnlyField(label: f.$1, value: f.$2),
-                );
-              }).toList(),
+              children: fields
+                  .map((f) => SizedBox(
+                        width: colW,
+                        child: AdminTextField(
+                            label: f.$1, controller: f.$2),
+                      ))
+                  .toList(),
             );
           }),
-        ],
-      ),
-    );
-  }
-}
-
-class _HoursCard extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final hours = [
-      ('Lunes a viernes', '11:00 AM - 11:00 PM'),
-      ('Sábado', '11:00 AM - 12:00 AM'),
-      ('Domingo', '11:00 AM - 11:00 PM'),
-    ];
-    return AdminCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Horarios de atención',
-                  style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13.5, fontWeight: FontWeight.w700)),
-              const AdminButton(
-                  label: 'Editar',
-                  icon: Icons.edit,
-                  variant: AdminBtnVariant.ghost,
-                  size: AdminBtnSize.sm),
-            ],
-          ),
-          const SizedBox(height: 6),
-          for (final h in hours)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: const BoxDecoration(
-                border: Border(
-                    bottom: BorderSide(color: AdminColors.border)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(h.$1,
-                      style: const TextStyle(
-                          fontSize: 13, color: AdminColors.textMuted)),
-                  Text(h.$2,
-                      style: GoogleFonts.robotoMono(
-                          fontSize: 13, fontWeight: FontWeight.w600)),
-                ],
-              ),
+          const SizedBox(height: 18),
+          Align(
+            alignment: Alignment.centerRight,
+            child: AdminButton(
+              label: 'Guardar cambios',
+              icon: Icons.check,
+              size: AdminBtnSize.md,
+              loading: saving,
+              onPressed: onSave,
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SalesBarCard extends StatelessWidget {
-  static const _bars = [
-    12, 18, 24, 14, 22, 30, 28, 34, 40, 32, 28, 36, 42, 38,
-    30, 26, 32, 44, 50, 46, 38, 42, 48, 52, 60, 56, 44, 50,
-    58, 64
-  ];
-  @override
-  Widget build(BuildContext context) {
-    return AdminCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Ventas últimos 30 días',
-                  style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13.5, fontWeight: FontWeight.w700)),
-              Text('S/ 12,480',
-                  style: GoogleFonts.plusJakartaSans(
-                      fontSize: 18, fontWeight: FontWeight.w800)),
-            ],
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: 100,
-            child: LayoutBuilder(builder: (context, c) {
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: List.generate(_bars.length, (i) {
-                  final maxBar = _bars.reduce((a, b) => a > b ? a : b);
-                  final h = (_bars[i] / maxBar) * 90;
-                  return Expanded(
-                    child: Padding(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 1.5),
-                      child: Container(
-                        height: h,
-                        decoration: BoxDecoration(
-                          color: i == _bars.length - 1
-                              ? AdminColors.primary
-                              : AdminColors.primary
-                                  .withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-              );
-            }),
           ),
         ],
       ),
@@ -314,9 +489,13 @@ class _SalesBarCard extends StatelessWidget {
   }
 }
 
-class _CommissionCard extends StatelessWidget {
+class _CommissionMiniCard extends StatelessWidget {
   final double pct;
-  const _CommissionCard({required this.pct});
+  final DateTime? updatedAt;
+  final VoidCallback onEdit;
+  const _CommissionMiniCard(
+      {required this.pct, required this.updatedAt, required this.onEdit});
+
   @override
   Widget build(BuildContext context) {
     return AdminCard(
@@ -345,18 +524,21 @@ class _CommissionCard extends StatelessWidget {
               color: AdminColors.bg,
               borderRadius: BorderRadius.circular(6),
             ),
-            child: const Text(
-              'Acuerdo vigente desde 15 mar 2024',
-              style: TextStyle(
+            child: Text(
+              updatedAt == null
+                  ? 'Sin cambios registrados'
+                  : 'Vigente desde ${_fmtDate(updatedAt!)}',
+              style: const TextStyle(
                   fontSize: 11.5, color: AdminColors.textMuted),
             ),
           ),
           const SizedBox(height: 12),
-          const AdminButton(
+          AdminButton(
             label: 'Modificar comisión',
             icon: Icons.edit,
             variant: AdminBtnVariant.secondary,
             size: AdminBtnSize.sm,
+            onPressed: onEdit,
           ),
         ],
       ),
@@ -365,16 +547,13 @@ class _CommissionCard extends StatelessWidget {
 }
 
 class _MonthSummaryCard extends StatelessWidget {
+  final Future<StoreMonthStats>? statsFuture;
+  final double rating;
+  const _MonthSummaryCard(
+      {required this.statsFuture, required this.rating});
+
   @override
   Widget build(BuildContext context) {
-    final rows = [
-      ('Pedidos', '892'),
-      ('Ventas brutas', 'S/ 12,480'),
-      ('Comisión Runa', 'S/ 2,246'),
-      ('A pagar al comercio', 'S/ 10,234'),
-      ('Cancelaciones', '14 (1.6%)'),
-      ('Rating prom.', '4.8 ★'),
-    ];
     return AdminCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -383,58 +562,1013 @@ class _MonthSummaryCard extends StatelessWidget {
               style: GoogleFonts.plusJakartaSans(
                   fontSize: 13, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
-          for (final r in rows)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: const BoxDecoration(
-                border: Border(
-                    bottom: BorderSide(color: AdminColors.border)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          FutureBuilder<StoreMonthStats>(
+            future: statsFuture,
+            builder: (context, snap) {
+              if (statsFuture == null) {
+                return const _SummaryHint('Comercio sin guardar.');
+              }
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 18),
+                  child: Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                );
+              }
+              if (snap.hasError) {
+                return const _SummaryHint('No se pudo cargar el resumen.');
+              }
+              final st = snap.data ?? StoreMonthStats.empty;
+              final rows = <(String, String)>[
+                ('Pedidos', '${st.orders}'),
+                ('Ventas brutas', _money(st.gross)),
+                ('Comisión Runa', _money(st.commission)),
+                ('A pagar al comercio', _money(st.payout)),
+                ('Cancelaciones',
+                    '${st.cancellations} (${st.cancelRate.toStringAsFixed(1)}%)'),
+                ('Rating prom.', '${rating.toStringAsFixed(1)} ★'),
+              ];
+              return Column(
                 children: [
-                  Text(r.$1,
-                      style: const TextStyle(
-                          fontSize: 12.5, color: AdminColors.textMuted)),
-                  Text(r.$2,
-                      style: const TextStyle(
-                          fontSize: 12.5, fontWeight: FontWeight.w700)),
+                  for (final r in rows)
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: const BoxDecoration(
+                        border: Border(
+                            bottom:
+                                BorderSide(color: AdminColors.border)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(r.$1,
+                              style: const TextStyle(
+                                  fontSize: 12.5,
+                                  color: AdminColors.textMuted)),
+                          Text(r.$2,
+                              style: const TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
                 ],
-              ),
-            ),
+              );
+            },
+          ),
         ],
       ),
     );
   }
 }
 
-class _ActionsCard extends StatelessWidget {
+class _SummaryHint extends StatelessWidget {
+  final String text;
+  const _SummaryHint(this.text);
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Text(text,
+          style: const TextStyle(
+              fontSize: 12.5, color: AdminColors.textMuted)),
+    );
+  }
+}
+
+/// ─── Menú tab ──────────────────────────────────────────────────────
+class _MenuTab extends StatelessWidget {
+  final String storeId;
+  final void Function(String, {bool error}) onSnack;
+  const _MenuTab({required this.storeId, required this.onSnack});
+
+  Future<void> _toggleAvailable(ProductModel p, bool v) async {
+    try {
+      await StoreService.updateProduct(storeId, p.id, {'isAvailable': v});
+    } catch (e) {
+      onSnack('No se pudo actualizar: $e', error: true);
+    }
+  }
+
+  Future<void> _confirmDelete(BuildContext context, ProductModel p) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Eliminar producto'),
+        content: Text('¿Eliminar "${p.name}" del menú? Esta acción no se '
+            'puede deshacer.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(foregroundColor: AdminColors.red),
+              child: const Text('Eliminar')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await StoreService.deleteProduct(storeId, p.id);
+      onSnack('Producto eliminado.');
+    } catch (e) {
+      onSnack('No se pudo eliminar: $e', error: true);
+    }
+  }
+
+  Future<void> _openProductDialog(BuildContext context,
+      {ProductModel? product}) async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => ProductDialog(
+        storeId: storeId,
+        product: product,
+        onSnack: onSnack,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (storeId.isEmpty) {
+      return const AdminCard(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Text('Guarda el comercio para gestionar su menú.',
+              style: TextStyle(
+                  fontSize: 13, color: AdminColors.textMuted)),
+        ),
+      );
+    }
+    return AdminCard.flush(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 16, 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Menú del comercio',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13.5, fontWeight: FontWeight.w700)),
+                AdminButton(
+                  label: 'Agregar producto',
+                  icon: Icons.add,
+                  size: AdminBtnSize.sm,
+                  onPressed: () => _openProductDialog(context),
+                ),
+              ],
+            ),
+          ),
+          StreamBuilder<List<ProductModel>>(
+            stream: StoreService.streamProducts(storeId),
+            builder: (context, snap) {
+              if (!snap.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.all(40),
+                  child: Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                );
+              }
+              final products = snap.data!;
+              if (products.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(40),
+                  child: Center(
+                    child: Text('Este comercio aún no tiene productos.',
+                        style: TextStyle(
+                            fontSize: 13, color: AdminColors.textMuted)),
+                  ),
+                );
+              }
+              return Column(
+                children: [
+                  for (int i = 0; i < products.length; i++)
+                    _ProductRow(
+                      product: products[i],
+                      onToggle: (v) => _toggleAvailable(products[i], v),
+                      onEdit: () => _openProductDialog(context,
+                          product: products[i]),
+                      onDelete: () => _confirmDelete(context, products[i]),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProductRow extends StatelessWidget {
+  final ProductModel product;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  const _ProductRow({
+    required this.product,
+    required this.onToggle,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AdminColors.border)),
+      ),
+      child: Row(
+        children: [
+          _Thumb(url: product.imageUrl),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(product.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                if (product.description.isNotEmpty)
+                  Text(product.description,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 11, color: AdminColors.textMuted)),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              product.category.isEmpty ? '—' : product.category,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 12.5, color: AdminColors.textMuted),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              _money(product.price),
+              textAlign: TextAlign.right,
+              style: GoogleFonts.robotoMono(
+                  fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Switch(
+            value: product.isAvailable,
+            activeThumbColor: AdminColors.primary,
+            onChanged: onToggle,
+          ),
+          IconButton(
+            onPressed: onEdit,
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            splashRadius: 18,
+            tooltip: 'Editar',
+          ),
+          IconButton(
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline,
+                size: 18, color: AdminColors.red),
+            splashRadius: 18,
+            tooltip: 'Eliminar',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Thumb extends StatelessWidget {
+  final String url;
+  const _Thumb({required this.url});
+  @override
+  Widget build(BuildContext context) {
+    if (url.isEmpty) {
+      return Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: AdminColors.grayTint,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Icon(Icons.restaurant_menu,
+            size: 18, color: AdminColors.textMuted),
+      );
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.network(
+        url,
+        width: 40,
+        height: 40,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(
+          width: 40,
+          height: 40,
+          color: AdminColors.grayTint,
+          child: const Icon(Icons.broken_image_outlined,
+              size: 18, color: AdminColors.textMuted),
+        ),
+      ),
+    );
+  }
+}
+
+/// ─── Add / Edit product dialog ─────────────────────────────────────
+class ProductDialog extends StatefulWidget {
+  final String storeId;
+  final ProductModel? product;
+  final void Function(String, {bool error}) onSnack;
+  const ProductDialog({
+    super.key,
+    required this.storeId,
+    this.product,
+    required this.onSnack,
+  });
+
+  @override
+  State<ProductDialog> createState() => _ProductDialogState();
+}
+
+class _ProductDialogState extends State<ProductDialog> {
+  late final TextEditingController _name;
+  late final TextEditingController _description;
+  late final TextEditingController _price;
+  late final TextEditingController _category;
+  late final TextEditingController _imageUrl;
+  late bool _isAvailable;
+  bool _saving = false;
+  String? _error;
+
+  bool get _isEdit => widget.product != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.product;
+    _name = TextEditingController(text: p?.name ?? '');
+    _description = TextEditingController(text: p?.description ?? '');
+    _price =
+        TextEditingController(text: p == null ? '' : p.price.toStringAsFixed(2));
+    _category = TextEditingController(text: p?.category ?? '');
+    _imageUrl = TextEditingController(text: p?.imageUrl ?? '');
+    _isAvailable = p?.isAvailable ?? true;
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _description.dispose();
+    _price.dispose();
+    _category.dispose();
+    _imageUrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _name.text.trim();
+    final price = double.tryParse(_price.text.trim().replaceAll(',', '.'));
+    if (name.isEmpty || price == null) {
+      setState(() => _error = 'Nombre y un precio válido son obligatorios.');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final model = ProductModel(
+      id: widget.product?.id ?? '',
+      name: name,
+      description: _description.text.trim(),
+      price: price,
+      category: _category.text.trim(),
+      imageUrl: _imageUrl.text.trim(),
+      isAvailable: _isAvailable,
+    );
+    try {
+      if (_isEdit) {
+        await StoreService.updateProduct(
+            widget.storeId, widget.product!.id, model.toMap());
+      } else {
+        await StoreService.addProduct(widget.storeId, model);
+      }
+      if (!mounted) return;
+      Navigator.pop(context);
+      widget.onSnack(_isEdit ? 'Producto actualizado.' : 'Producto agregado.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = 'No se pudo guardar: $e';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AdminColors.surface,
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(_isEdit ? 'Editar producto' : 'Agregar producto',
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 16, fontWeight: FontWeight.w800)),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, size: 18),
+                    splashRadius: 18,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              AdminTextField(label: 'Nombre *', controller: _name),
+              const SizedBox(height: 12),
+              AdminTextField(
+                  label: 'Descripción', controller: _description),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: AdminTextField(
+                        label: 'Precio (S/) *',
+                        controller: _price,
+                        keyboardType: TextInputType.number),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: AdminTextField(
+                        label: 'Categoría', controller: _category),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              AdminTextField(
+                  label: 'URL de imagen', controller: _imageUrl),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Switch(
+                    value: _isAvailable,
+                    activeThumbColor: AdminColors.primary,
+                    onChanged: (v) => setState(() => _isAvailable = v),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(_isAvailable ? 'Disponible' : 'No disponible',
+                      style: const TextStyle(
+                          fontSize: 13, color: AdminColors.textMuted)),
+                ],
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(_error!,
+                    style: const TextStyle(
+                        fontSize: 12.5, color: AdminColors.red)),
+              ],
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  AdminButton(
+                      label: 'Cancelar',
+                      variant: AdminBtnVariant.secondary,
+                      size: AdminBtnSize.md,
+                      onPressed: () => Navigator.pop(context)),
+                  const SizedBox(width: 10),
+                  AdminButton(
+                      label: _isEdit ? 'Guardar' : 'Agregar',
+                      size: AdminBtnSize.md,
+                      loading: _saving,
+                      onPressed: _save),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ─── Horarios tab ──────────────────────────────────────────────────
+class _HorariosTab extends StatefulWidget {
+  final Map<String, dynamic>? horarios;
+  final Future<void> Function(Map<String, dynamic>) onSave;
+  const _HorariosTab({required this.horarios, required this.onSave});
+
+  @override
+  State<_HorariosTab> createState() => _HorariosTabState();
+}
+
+class _HorariosTabState extends State<_HorariosTab> {
+  late Map<String, _DayHours> _days;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _days = {
+      for (final id in _dayLabels.keys)
+        id: _DayHours.fromMap(
+            (widget.horarios?[id] as Map?)?.cast<String, dynamic>()),
+    };
+  }
+
+  Future<void> _pick(String dayId, bool isOpen) async {
+    final current = isOpen ? _days[dayId]!.open : _days[dayId]!.close;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _parse(current),
+    );
+    if (picked == null) return;
+    final str =
+        '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+    setState(() {
+      if (isOpen) {
+        _days[dayId] = _days[dayId]!.copyWith(open: str);
+      } else {
+        _days[dayId] = _days[dayId]!.copyWith(close: str);
+      }
+    });
+  }
+
+  TimeOfDay _parse(String hhmm) {
+    final parts = hhmm.split(':');
+    return TimeOfDay(
+        hour: int.tryParse(parts.first) ?? 9,
+        minute: parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0);
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    final map = {for (final e in _days.entries) e.key: e.value.toMap()};
+    await widget.onSave(map);
+    if (mounted) setState(() => _saving = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AdminCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Acciones',
+          Text('Horarios de atención',
               style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 10),
-          const AdminButton(
-              label: 'Ver pedidos',
-              icon: Icons.visibility_outlined,
-              variant: AdminBtnVariant.secondary,
-              size: AdminBtnSize.sm),
-          const SizedBox(height: 8),
-          const AdminButton(
-              label: 'Contactar comercio',
-              icon: Icons.message_outlined,
-              variant: AdminBtnVariant.secondary,
-              size: AdminBtnSize.sm),
-          const SizedBox(height: 8),
-          const AdminButton(
-              label: 'Pausar operación',
-              variant: AdminBtnVariant.danger,
-              size: AdminBtnSize.sm),
+                  fontSize: 13.5, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          for (final id in _dayLabels.keys)
+            _DayRow(
+              label: _dayLabels[id]!,
+              hours: _days[id]!,
+              onToggleClosed: (closed) => setState(
+                  () => _days[id] = _days[id]!.copyWith(closed: closed)),
+              onPickOpen: () => _pick(id, true),
+              onPickClose: () => _pick(id, false),
+            ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: AdminButton(
+              label: 'Guardar horarios',
+              icon: Icons.check,
+              size: AdminBtnSize.md,
+              loading: _saving,
+              onPressed: _save,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DayHours {
+  final String open;
+  final String close;
+  final bool closed;
+  const _DayHours(
+      {this.open = '11:00', this.close = '23:00', this.closed = false});
+
+  factory _DayHours.fromMap(Map<String, dynamic>? m) => _DayHours(
+        open: m?['open'] ?? '11:00',
+        close: m?['close'] ?? '23:00',
+        closed: m?['closed'] ?? false,
+      );
+
+  _DayHours copyWith({String? open, String? close, bool? closed}) => _DayHours(
+        open: open ?? this.open,
+        close: close ?? this.close,
+        closed: closed ?? this.closed,
+      );
+
+  Map<String, dynamic> toMap() =>
+      {'open': open, 'close': close, 'closed': closed};
+}
+
+class _DayRow extends StatelessWidget {
+  final String label;
+  final _DayHours hours;
+  final ValueChanged<bool> onToggleClosed;
+  final VoidCallback onPickOpen;
+  final VoidCallback onPickClose;
+  const _DayRow({
+    required this.label,
+    required this.hours,
+    required this.onToggleClosed,
+    required this.onPickOpen,
+    required this.onPickClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AdminColors.border)),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(label,
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600)),
+          ),
+          if (hours.closed)
+            const Expanded(
+              child: Text('Cerrado',
+                  style: TextStyle(
+                      fontSize: 13, color: AdminColors.textMuted)),
+            )
+          else
+            Expanded(
+              child: Row(
+                children: [
+                  _TimeButton(label: hours.open, onTap: onPickOpen),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    child: Text('—',
+                        style: TextStyle(color: AdminColors.textMuted)),
+                  ),
+                  _TimeButton(label: hours.close, onTap: onPickClose),
+                ],
+              ),
+            ),
+          Row(
+            children: [
+              Text(hours.closed ? 'Cerrado' : 'Abierto',
+                  style: const TextStyle(
+                      fontSize: 12, color: AdminColors.textMuted)),
+              Switch(
+                value: !hours.closed,
+                activeThumbColor: AdminColors.primary,
+                onChanged: (open) => onToggleClosed(!open),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimeButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _TimeButton({required this.label, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          border: Border.all(color: AdminColors.border),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.schedule, size: 14, color: AdminColors.textMuted),
+            const SizedBox(width: 6),
+            Text(label,
+                style: GoogleFonts.robotoMono(
+                    fontSize: 13, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// ─── Comisión tab ──────────────────────────────────────────────────
+class _ComisionTab extends StatefulWidget {
+  final StoreModel store;
+  final Future<void> Function(double) onSave;
+  const _ComisionTab({required this.store, required this.onSave});
+
+  @override
+  State<_ComisionTab> createState() => _ComisionTabState();
+}
+
+class _ComisionTabState extends State<_ComisionTab> {
+  late final TextEditingController _ctrl;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(
+        text: (widget.store.commissionPct ?? 18).toStringAsFixed(0));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final pct = double.tryParse(_ctrl.text.trim().replaceAll(',', '.'));
+    if (pct == null || pct < 0 || pct > 100) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Ingresa un porcentaje válido (0–100).'),
+        backgroundColor: AdminColors.red,
+      ));
+      return;
+    }
+    setState(() => _saving = true);
+    await widget.onSave(pct);
+    if (mounted) setState(() => _saving = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final updatedAt = widget.store.commissionUpdatedAt;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 520),
+      child: AdminCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const AdminEyebrow('COMISIÓN ACTUAL'),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text('${(widget.store.commissionPct ?? 18).toStringAsFixed(0)}%',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 36, fontWeight: FontWeight.w800)),
+                const SizedBox(width: 8),
+                const Text('por pedido',
+                    style: TextStyle(
+                        fontSize: 13, color: AdminColors.textMuted)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              updatedAt == null
+                  ? 'Sin cambios registrados.'
+                  : 'Último cambio: ${_fmtDate(updatedAt)}',
+              style: const TextStyle(
+                  fontSize: 12.5, color: AdminColors.textMuted),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: 200,
+              child: AdminTextField(
+                label: 'Nueva comisión (%)',
+                controller: _ctrl,
+                keyboardType: TextInputType.number,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: AdminButton(
+                label: 'Modificar comisión',
+                icon: Icons.percent,
+                size: AdminBtnSize.md,
+                loading: _saving,
+                onPressed: _save,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// ─── Ventas tab ────────────────────────────────────────────────────
+class _VentasTab extends StatelessWidget {
+  final Future<StoreMonthStats>? statsFuture;
+  const _VentasTab({required this.statsFuture});
+
+  @override
+  Widget build(BuildContext context) {
+    if (statsFuture == null) {
+      return const AdminCard(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Text('Guarda el comercio para ver sus ventas.',
+              style: TextStyle(
+                  fontSize: 13, color: AdminColors.textMuted)),
+        ),
+      );
+    }
+    return FutureBuilder<StoreMonthStats>(
+      future: statsFuture,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const AdminCard(
+            child: Padding(
+              padding: EdgeInsets.all(40),
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
+          );
+        }
+        if (snap.hasError) {
+          return AdminCard(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text('No se pudieron cargar las ventas: ${snap.error}',
+                  style: const TextStyle(
+                      fontSize: 13, color: AdminColors.red)),
+            ),
+          );
+        }
+        final st = snap.data ?? StoreMonthStats.empty;
+        final bars =
+            st.dailyGross.isEmpty ? <double>[] : st.dailyGross.skip(1).toList();
+        return AdminCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Ventas del mes',
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13.5, fontWeight: FontWeight.w700)),
+                  Text(_money(st.gross),
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 18, fontWeight: FontWeight.w800)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                height: 120,
+                child: bars.every((b) => b == 0)
+                    ? const Center(
+                        child: Text('Sin ventas registradas este mes.',
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                color: AdminColors.textMuted)),
+                      )
+                    : _BarChart(values: bars),
+              ),
+              const SizedBox(height: 18),
+              _VentasMetric('Pedidos', '${st.orders}'),
+              _VentasMetric('Ventas brutas', _money(st.gross)),
+              _VentasMetric('Comisión Runa', _money(st.commission)),
+              _VentasMetric('A pagar al comercio', _money(st.payout)),
+              _VentasMetric('Cancelaciones',
+                  '${st.cancellations} (${st.cancelRate.toStringAsFixed(1)}%)'),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _BarChart extends StatelessWidget {
+  final List<double> values;
+  const _BarChart({required this.values});
+  @override
+  Widget build(BuildContext context) {
+    final maxV = values.fold<double>(0, (a, b) => b > a ? b : a);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: List.generate(values.length, (i) {
+        final h = maxV == 0 ? 0.0 : (values[i] / maxV) * 110;
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 1.5),
+            child: Container(
+              height: h,
+              decoration: BoxDecoration(
+                color: AdminColors.primary.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _VentasMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  const _VentasMetric(this.label, this.value);
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AdminColors.border)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 12.5, color: AdminColors.textMuted)),
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 12.5, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+/// ─── Documentos tab (placeholder) ──────────────────────────────────
+class _DocumentosTab extends StatelessWidget {
+  const _DocumentosTab();
+  @override
+  Widget build(BuildContext context) {
+    return AdminCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Documentos',
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13.5, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: AdminColors.bg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AdminColors.border),
+            ),
+            child: const Column(
+              children: [
+                Icon(Icons.folder_outlined,
+                    size: 32, color: AdminColors.textMuted),
+                SizedBox(height: 10),
+                Text(
+                  'La gestión de documentos (RUC, licencias, contratos) estará '
+                  'disponible próximamente.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 13, color: AdminColors.textMuted),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
