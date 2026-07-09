@@ -371,6 +371,17 @@ class _StoresTable extends StatelessWidget {
   }
 }
 
+/// Subtitle shown under the store name in the list: the district when it has a
+/// real (non-blank) value, otherwise the address. An empty-string `district`
+/// (written by the General tab when the field is left blank) must NOT shadow the
+/// address — hence the `.trim().isNotEmpty` check instead of a plain `??`.
+String _storeSubtitle(StoreModel store) {
+  final district = store.district?.trim() ?? '';
+  if (district.isNotEmpty) return district;
+  final address = store.address.trim();
+  return address.isEmpty ? '—' : address;
+}
+
 class _StoreRow extends StatelessWidget {
   final StoreModel store;
   final int index;
@@ -432,8 +443,7 @@ class _StoreRow extends StatelessWidget {
                                 fontWeight: FontWeight.w600),
                             overflow: TextOverflow.ellipsis),
                         Text(
-                            store.district ??
-                                (store.address.isEmpty ? '—' : store.address),
+                            _storeSubtitle(store),
                             maxLines: 1,
                             style: const TextStyle(
                                 fontSize: 11,

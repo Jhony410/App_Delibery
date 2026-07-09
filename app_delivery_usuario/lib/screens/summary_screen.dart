@@ -118,6 +118,7 @@ class SummaryScreen extends StatelessWidget {
                               e.value.name,
                               e.value.lineTotal.toStringAsFixed(2),
                               isLast,
+                              note: e.value.note,
                             );
                           }).toList(),
                         ),
@@ -240,7 +241,8 @@ class _OrderLine extends StatelessWidget {
   final String name;
   final String price;
   final bool isLast;
-  const _OrderLine(this.qty, this.name, this.price, this.isLast);
+  final String? note;
+  const _OrderLine(this.qty, this.name, this.price, this.isLast, {this.note});
 
   @override
   Widget build(BuildContext context) => Container(
@@ -251,6 +253,7 @@ class _OrderLine extends StatelessWidget {
                   color: isLast ? Colors.transparent : AppColors.border)),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
                 width: 30,
@@ -260,9 +263,20 @@ class _OrderLine extends StatelessWidget {
                         color: AppColors.textMuted,
                         fontWeight: FontWeight.w700))),
             Expanded(
-                child: Text(name,
+                child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name,
                     style: const TextStyle(
-                        fontSize: 13.5, fontWeight: FontWeight.w500))),
+                        fontSize: 13.5, fontWeight: FontWeight.w500)),
+                if (note != null && note!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(note!,
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textMuted)),
+                ],
+              ],
+            )),
             Text('S/ $price',
                 style: const TextStyle(
                     fontSize: 13.5, fontWeight: FontWeight.w700)),

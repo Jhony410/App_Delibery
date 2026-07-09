@@ -1,0 +1,27 @@
+rules_version = '2';
+
+// Firebase Storage security rules for the DeliPuno platform (delypuno-ddd2d).
+// Mirrors the admin gate used in firestore.rules: a user is an admin when a
+// document with their uid exists under Firestore's `admins/` collection.
+//
+// Store images (logos/photos) live under `stores/{storeId}/...`. They are
+// publicly readable (the customer app browses the catalogue before auth) and
+// writable only by admins from the panel.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAdmin() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
+
+    // ── Store images (logo/photo) ───────────────────────────────────────
+    match /stores/{storeId}/{fileName=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Everything else is denied by default (no catch-all match).
+  }
+}

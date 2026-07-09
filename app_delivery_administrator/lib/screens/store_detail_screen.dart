@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models/product_model.dart';
 import '../models/store_model.dart';
@@ -63,9 +64,12 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
   late final TextEditingController _phone;
   late final TextEditingController _email;
   late final TextEditingController _contacto;
+  late final TextEditingController _mapsUrl;
 
   bool _savingGeneral = false;
   bool _togglingStatus = false;
+  bool _uploadingImage = false;
+  bool _deleting = false;
 
   Future<StoreMonthStats>? _statsFuture;
 
@@ -92,6 +96,7 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
     _phone = TextEditingController(text: _store.phone ?? '');
     _email = TextEditingController(text: _store.email ?? '');
     _contacto = TextEditingController(text: _store.contacto ?? '');
+    _mapsUrl = TextEditingController(text: _store.mapsUrl ?? '');
     if (_store.id.isNotEmpty) _refreshStats();
   }
 
@@ -105,6 +110,7 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
     _phone.dispose();
     _email.dispose();
     _contacto.dispose();
+    _mapsUrl.dispose();
     super.dispose();
   }
 
@@ -135,6 +141,7 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
       'phone': _phone.text.trim(),
       'email': _email.text.trim(),
       'contacto': _contacto.text.trim(),
+      'mapsUrl': _mapsUrl.text.trim(),
     };
     try {
       await StoreService.updateStore(_store.id, fields);
@@ -148,6 +155,7 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
           phone: fields['phone'],
           email: fields['email'],
           contacto: fields['contacto'],
+          mapsUrl: fields['mapsUrl'],
         );
         _savingGeneral = false;
       });
@@ -172,6 +180,116 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
     } catch (e) {
       setState(() => _togglingStatus = false);
       _snack('No se pudo cambiar el estado: $e', error: true);
+    }
+  }
+
+  Future<void> _pickAndUploadLogo() async {
+    if (_store.id.isEmpty) return;
+    final XFile? file;
+    try {
+      file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        imageQuality: 85,
+      );
+    } catch (e) {
+      _snack('No se pudo abrir el selector de imagen: $e', error: true);
+      return;
+    }
+    if (file == null) return; // user cancelled
+    setState(() => _uploadingImage = true);
+    try {
+      final bytes = await file.readAsBytes();
+      final url = await StoreService.uploadStoreLogo(
+        _store.id,
+        bytes,
+        contentType: file.mimeType ?? 'image/jpeg',
+      );
+      await StoreService.updateStore(_store.id, {'imagenUrl': url});
+      setState(() {
+        _store = _store.copyWith(imagenUrl: url);
+        _uploadingImage = false;
+      });
+      _snack('Foto del local actualizada.');
+    } catch (e) {
+      setState(() => _uploadingImage = false);
+      _snack('No se pudo subir la foto: $e', error: true);
+    }
+  }
+
+  Future<void> _deleteStore() async {
+    if (_store.id.isEmpty) return;
+    // Check for associated order history so the dialog can warn the admin.
+    int? orderCount;
+    try {
+      orderCount = await StoreService.countOrdersForStore(_store.id);
+    } catch (_) {
+      orderCount = null; // couldn't verify — the dialog notes this
+    }
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Eliminar comercio'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+                '¿Eliminar "${_store.name}"? Esta acción no se puede deshacer.'),
+            if (orderCount != null && orderCount > 0) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AdminColors.red.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: AdminColors.red.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  'Este comercio tiene $orderCount pedido(s) asociado(s). '
+                  'Eliminarlo puede afectar el historial de esos pedidos, que '
+                  'quedarán sin comercio de referencia. Los pedidos y los '
+                  'productos NO se eliminan automáticamente.',
+                  style: const TextStyle(
+                      fontSize: 12.5, color: AdminColors.red),
+                ),
+              ),
+            ] else if (orderCount == null) ...[
+              const SizedBox(height: 14),
+              const Text(
+                'No se pudo verificar si el comercio tiene pedidos asociados.',
+                style:
+                    TextStyle(fontSize: 12.5, color: AdminColors.textMuted),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(foregroundColor: AdminColors.red),
+              child: const Text('Eliminar de todas formas')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _deleting = true);
+    try {
+      await StoreService.deleteStore(_store.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Comercio "${_store.name}" eliminado.')),
+      );
+      Navigator.pushReplacementNamed(context, AdminRoutes.stores);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      _snack('No se pudo eliminar el comercio: $e', error: true);
     }
   }
 
@@ -218,6 +336,14 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
       activeId: 'comercios',
       title: s.name,
       actions: [
+        AdminButton(
+          label: 'Eliminar',
+          icon: Icons.delete_outline,
+          variant: AdminBtnVariant.danger,
+          size: AdminBtnSize.sm,
+          loading: _deleting,
+          onPressed: _store.id.isEmpty ? null : _deleteStore,
+        ),
         AdminButton(
           label: s.activo ? 'Pausar' : 'Reactivar',
           variant: AdminBtnVariant.secondary,
@@ -279,11 +405,15 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
         phone: _phone,
         email: _email,
         contacto: _contacto,
+        mapsUrl: _mapsUrl,
         saving: _savingGeneral,
         onSave: _saveGeneral,
         activo: _store.activo,
         toggling: _togglingStatus,
         onToggle: _toggleStatus,
+        imageUrl: _store.imagenUrl,
+        uploadingImage: _uploadingImage,
+        onPickImage: _pickAndUploadLogo,
       );
       final side = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -402,12 +532,15 @@ class _TabsBar extends StatelessWidget {
 /// ─── General tab ───────────────────────────────────────────────────
 class _GeneralForm extends StatelessWidget {
   final TextEditingController name, ruc, category, district, address, phone,
-      email, contacto;
+      email, contacto, mapsUrl;
   final bool saving;
   final VoidCallback onSave;
   final bool activo;
   final bool toggling;
   final VoidCallback onToggle;
+  final String? imageUrl;
+  final bool uploadingImage;
+  final VoidCallback onPickImage;
 
   const _GeneralForm({
     required this.name,
@@ -418,11 +551,15 @@ class _GeneralForm extends StatelessWidget {
     required this.phone,
     required this.email,
     required this.contacto,
+    required this.mapsUrl,
     required this.saving,
     required this.onSave,
     required this.activo,
     required this.toggling,
     required this.onToggle,
+    required this.imageUrl,
+    required this.uploadingImage,
+    required this.onPickImage,
   });
 
   @override
@@ -458,6 +595,12 @@ class _GeneralForm extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
+          _StorePhoto(
+            imageUrl: imageUrl,
+            uploading: uploadingImage,
+            onPick: onPickImage,
+          ),
+          const SizedBox(height: 16),
           LayoutBuilder(builder: (context, c) {
             final colW = (c.maxWidth - 14) / 2;
             return Wrap(
@@ -472,6 +615,13 @@ class _GeneralForm extends StatelessWidget {
                   .toList(),
             );
           }),
+          const SizedBox(height: 14),
+          AdminTextField(
+            label: 'Link de Google Maps (ubicación exacta)',
+            controller: mapsUrl,
+            hint: 'Pega el enlace que Google Maps genera al compartir',
+            keyboardType: TextInputType.url,
+          ),
           const SizedBox(height: 18),
           Align(
             alignment: Alignment.centerRight,
@@ -485,6 +635,71 @@ class _GeneralForm extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Store photo card: shows the current image (or a placeholder) plus a button to
+/// upload/replace it. Upload itself is handled by the parent via [onPick].
+class _StorePhoto extends StatelessWidget {
+  final String? imageUrl;
+  final bool uploading;
+  final VoidCallback onPick;
+  const _StorePhoto({
+    required this.imageUrl,
+    required this.uploading,
+    required this.onPick,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            width: 88,
+            height: 88,
+            color: AdminColors.grayTint,
+            child: hasImage
+                ? Image.network(
+                    imageUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const Icon(
+                        Icons.broken_image_outlined,
+                        color: AdminColors.textMuted),
+                  )
+                : const Icon(Icons.storefront_outlined,
+                    size: 28, color: AdminColors.textMuted),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const AdminEyebrow('FOTO DEL LOCAL'),
+              const SizedBox(height: 4),
+              const Text(
+                'Sube una foto real del local. Se guarda en Firebase Storage y '
+                'se muestra en la ficha del comercio.',
+                style: TextStyle(fontSize: 12, color: AdminColors.textMuted),
+              ),
+              const SizedBox(height: 10),
+              AdminButton(
+                label: hasImage ? 'Reemplazar foto' : 'Subir foto',
+                icon: Icons.upload_outlined,
+                variant: AdminBtnVariant.secondary,
+                size: AdminBtnSize.sm,
+                loading: uploading,
+                onPressed: onPick,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -910,6 +1125,27 @@ class ProductDialog extends StatefulWidget {
   State<ProductDialog> createState() => _ProductDialogState();
 }
 
+/// Holds the two controllers for one editable option row (name + price)
+/// inside an option group in [ProductDialog].
+class _OptionRow {
+  final TextEditingController name;
+  final TextEditingController price;
+
+  _OptionRow({String name = '', String price = ''})
+      : name = TextEditingController(text: name),
+        price = TextEditingController(text: price);
+
+  factory _OptionRow.fromOption(ProductOption o) => _OptionRow(
+        name: o.name,
+        price: o.price == 0 ? '' : o.price.toStringAsFixed(2),
+      );
+
+  void dispose() {
+    name.dispose();
+    price.dispose();
+  }
+}
+
 class _ProductDialogState extends State<ProductDialog> {
   late final TextEditingController _name;
   late final TextEditingController _description;
@@ -917,6 +1153,12 @@ class _ProductDialogState extends State<ProductDialog> {
   late final TextEditingController _category;
   late final TextEditingController _imageUrl;
   late bool _isAvailable;
+
+  // Option groups — mirror the customer app's product schema.
+  late final List<_OptionRow> _sizes;
+  late final List<_OptionRow> _extras;
+  late final List<_OptionRow> _cutlery;
+
   bool _saving = false;
   String? _error;
 
@@ -933,6 +1175,9 @@ class _ProductDialogState extends State<ProductDialog> {
     _category = TextEditingController(text: p?.category ?? '');
     _imageUrl = TextEditingController(text: p?.imageUrl ?? '');
     _isAvailable = p?.isAvailable ?? true;
+    _sizes = (p?.sizes ?? []).map(_OptionRow.fromOption).toList();
+    _extras = (p?.extras ?? []).map(_OptionRow.fromOption).toList();
+    _cutlery = (p?.cutlery ?? []).map(_OptionRow.fromOption).toList();
   }
 
   @override
@@ -942,7 +1187,39 @@ class _ProductDialogState extends State<ProductDialog> {
     _price.dispose();
     _category.dispose();
     _imageUrl.dispose();
+    for (final r in [..._sizes, ..._extras, ..._cutlery]) {
+      r.dispose();
+    }
     super.dispose();
+  }
+
+  void _addRow(List<_OptionRow> group) =>
+      setState(() => group.add(_OptionRow()));
+
+  void _removeRow(List<_OptionRow> group, int index) =>
+      setState(() => group.removeAt(index).dispose());
+
+  /// Converts an option group's rows into [ProductOption]s. Fully-empty rows
+  /// are skipped so trailing blanks don't block saving. Returns null (and sets
+  /// [_error]) when a row is invalid.
+  List<ProductOption>? _collect(List<_OptionRow> rows, String groupLabel) {
+    final out = <ProductOption>[];
+    for (final r in rows) {
+      final name = r.name.text.trim();
+      final priceText = r.price.text.trim().replaceAll(',', '.');
+      if (name.isEmpty && priceText.isEmpty) continue;
+      if (name.isEmpty) {
+        _error = 'Cada opción de $groupLabel necesita un nombre.';
+        return null;
+      }
+      final price = priceText.isEmpty ? 0.0 : double.tryParse(priceText);
+      if (price == null || price < 0) {
+        _error = 'Precio inválido en "$name" ($groupLabel).';
+        return null;
+      }
+      out.add(ProductOption(name: name, price: price));
+    }
+    return out;
   }
 
   Future<void> _save() async {
@@ -950,6 +1227,13 @@ class _ProductDialogState extends State<ProductDialog> {
     final price = double.tryParse(_price.text.trim().replaceAll(',', '.'));
     if (name.isEmpty || price == null) {
       setState(() => _error = 'Nombre y un precio válido son obligatorios.');
+      return;
+    }
+    final sizes = _collect(_sizes, 'tamaño');
+    final extras = _collect(_extras, 'extras');
+    final cutlery = _collect(_cutlery, 'cubiertos');
+    if (sizes == null || extras == null || cutlery == null) {
+      setState(() {}); // surface the _error set by _collect
       return;
     }
     setState(() {
@@ -964,6 +1248,9 @@ class _ProductDialogState extends State<ProductDialog> {
       category: _category.text.trim(),
       imageUrl: _imageUrl.text.trim(),
       isAvailable: _isAvailable,
+      sizes: sizes,
+      extras: extras,
+      cutlery: cutlery,
     );
     try {
       if (_isEdit) {
@@ -1021,7 +1308,7 @@ class _ProductDialogState extends State<ProductDialog> {
                 children: [
                   Expanded(
                     child: AdminTextField(
-                        label: 'Precio (S/) *',
+                        label: 'Precio base (S/) *',
                         controller: _price,
                         keyboardType: TextInputType.number),
                   ),
@@ -1035,7 +1322,34 @@ class _ProductDialogState extends State<ProductDialog> {
               const SizedBox(height: 12),
               AdminTextField(
                   label: 'URL de imagen', controller: _imageUrl),
-              const SizedBox(height: 14),
+              const SizedBox(height: 20),
+              _OptionGroup(
+                title: 'Tamaño',
+                hint: 'Obligatorio · 1 · el precio reemplaza al precio base',
+                addLabel: 'Agregar tamaño',
+                rows: _sizes,
+                onAdd: () => _addRow(_sizes),
+                onRemove: (i) => _removeRow(_sizes, i),
+              ),
+              const SizedBox(height: 20),
+              _OptionGroup(
+                title: 'Extras',
+                hint: 'Opcional · varios · se suma al total (0 = Gratis)',
+                addLabel: 'Agregar extra',
+                rows: _extras,
+                onAdd: () => _addRow(_extras),
+                onRemove: (i) => _removeRow(_extras, i),
+              ),
+              const SizedBox(height: 20),
+              _OptionGroup(
+                title: 'Cubiertos',
+                hint: 'Opcional · varios · se suma al total (0 = Gratis)',
+                addLabel: 'Agregar cubierto',
+                rows: _cutlery,
+                onAdd: () => _addRow(_cutlery),
+                onRemove: (i) => _removeRow(_cutlery, i),
+              ),
+              const SizedBox(height: 16),
               Row(
                 children: [
                   Switch(
@@ -1076,6 +1390,90 @@ class _ProductDialogState extends State<ProductDialog> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Editable option group (Tamaño / Extras / Cubiertos): a titled list of
+/// name+price rows with per-row delete and an "add" button.
+class _OptionGroup extends StatelessWidget {
+  final String title;
+  final String hint;
+  final String addLabel;
+  final List<_OptionRow> rows;
+  final VoidCallback onAdd;
+  final ValueChanged<int> onRemove;
+
+  const _OptionGroup({
+    required this.title,
+    required this.hint,
+    required this.addLabel,
+    required this.rows,
+    required this.onAdd,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title,
+            style: GoogleFonts.plusJakartaSans(
+                fontSize: 13.5, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 2),
+        Text(hint,
+            style: const TextStyle(
+                fontSize: 11, color: AdminColors.textMuted)),
+        const SizedBox(height: 10),
+        if (rows.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text('Sin opciones.',
+                style:
+                    TextStyle(fontSize: 12, color: AdminColors.textMuted)),
+          ),
+        for (int i = 0; i < rows.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: AdminTextField(
+                      label: 'Nombre', controller: rows[i].name),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: AdminTextField(
+                    label: 'Precio (S/)',
+                    controller: rows[i].price,
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => onRemove(i),
+                  icon: const Icon(Icons.remove_circle_outline,
+                      size: 20, color: AdminColors.red),
+                  tooltip: 'Eliminar opción',
+                  splashRadius: 18,
+                ),
+              ],
+            ),
+          ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: AdminButton(
+            label: addLabel,
+            icon: Icons.add,
+            variant: AdminBtnVariant.secondary,
+            size: AdminBtnSize.sm,
+            onPressed: onAdd,
+          ),
+        ),
+      ],
     );
   }
 }

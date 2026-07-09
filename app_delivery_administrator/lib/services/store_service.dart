@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 import '../models/product_model.dart';
 import '../models/store_model.dart';
@@ -38,6 +41,7 @@ class StoreMonthStats {
 class StoreService {
   static final _col = FirebaseFirestore.instance.collection('stores');
   static final _orders = FirebaseFirestore.instance.collection('orders');
+  static final _storage = FirebaseStorage.instance;
 
   // ─── Stores ──────────────────────────────────────────────────────
   /// Real-time list of all stores ordered by name.
@@ -71,6 +75,28 @@ class StoreService {
       _col.doc(id).update({'activo': isActive});
 
   static Future<void> deleteStore(String id) => _col.doc(id).delete();
+
+  /// Uploads a store logo/photo to `stores/{storeId}/logo.jpg` in Firebase
+  /// Storage and returns its public download URL. The caller is responsible for
+  /// persisting the URL onto the store document (`imagenUrl`).
+  static Future<String> uploadStoreLogo(
+    String storeId,
+    Uint8List bytes, {
+    String contentType = 'image/jpeg',
+  }) async {
+    final ref = _storage.ref().child('stores/$storeId/logo.jpg');
+    await ref.putData(bytes, SettableMetadata(contentType: contentType));
+    return ref.getDownloadURL();
+  }
+
+  /// Number of orders that reference [storeId]. Used to warn before deleting a
+  /// store that still has order history. Queries the single-field `storeId`
+  /// index (no composite index required).
+  static Future<int> countOrdersForStore(String storeId) async {
+    final agg =
+        await _orders.where('storeId', isEqualTo: storeId).count().get();
+    return agg.count ?? 0;
+  }
 
   // Legacy helpers kept for any existing callers.
   static Future<void> updateOpen(String id, bool isOpen) =>

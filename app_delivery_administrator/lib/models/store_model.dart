@@ -24,6 +24,9 @@ class StoreModel {
   final String? contacto;
   final String? ruc;
   final String? imagenUrl;
+  /// Google Maps share link for the store's exact location. Stored as-is (a raw
+  /// string, no coordinate parsing) so the courier app can later open it.
+  final String? mapsUrl;
   /// Account status: true = comercio activo, false = pausado/suspendido.
   /// Distinct from [isOpen], which reflects whether it's currently open for
   /// orders based on its hours.
@@ -57,6 +60,7 @@ class StoreModel {
     this.contacto,
     this.ruc,
     this.imagenUrl,
+    this.mapsUrl,
     this.activo = true,
     this.pendingApproval = false,
     this.horarios,
@@ -86,6 +90,7 @@ class StoreModel {
         contacto: m['contacto'],
         ruc: m['ruc'],
         imagenUrl: m['imagenUrl'] ?? m['imagen_url'],
+        mapsUrl: m['mapsUrl'],
         // Default to active when the field is absent so existing stores
         // (written before this field existed) keep showing as "Activo".
         activo: m['activo'] ?? true,
@@ -118,6 +123,7 @@ class StoreModel {
         if (contacto != null) 'contacto': contacto,
         if (ruc != null) 'ruc': ruc,
         if (imagenUrl != null) 'imagenUrl': imagenUrl,
+        if (mapsUrl != null) 'mapsUrl': mapsUrl,
         'activo': activo,
         'pendingApproval': pendingApproval,
         if (horarios != null) 'horarios': horarios,
@@ -144,6 +150,7 @@ class StoreModel {
     String? contacto,
     String? ruc,
     String? imagenUrl,
+    String? mapsUrl,
     bool? activo,
     bool? pendingApproval,
     Map<String, dynamic>? horarios,
@@ -172,6 +179,7 @@ class StoreModel {
         contacto: contacto ?? this.contacto,
         ruc: ruc ?? this.ruc,
         imagenUrl: imagenUrl ?? this.imagenUrl,
+        mapsUrl: mapsUrl ?? this.mapsUrl,
         activo: activo ?? this.activo,
         pendingApproval: pendingApproval ?? this.pendingApproval,
         horarios: horarios ?? this.horarios,

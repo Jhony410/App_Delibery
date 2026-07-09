@@ -33,6 +33,7 @@ class ProductModel {
   final String category;
   final List<ProductVariant> sizes;
   final List<ProductExtra> extras;
+  final List<ProductExtra> cutlery;
   final bool isAvailable;
 
   const ProductModel({
@@ -46,6 +47,7 @@ class ProductModel {
     this.badge,
     this.sizes = const [],
     this.extras = const [],
+    this.cutlery = const [],
     this.isAvailable = true,
   });
 
@@ -66,6 +68,9 @@ class ProductModel {
         extras: (m['extras'] as List? ?? [])
             .map((e) => ProductExtra.fromMap(Map<String, dynamic>.from(e)))
             .toList(),
+        cutlery: (m['cutlery'] as List? ?? [])
+            .map((e) => ProductExtra.fromMap(Map<String, dynamic>.from(e)))
+            .toList(),
       );
 
   Map<String, dynamic> toMap() => {
@@ -78,5 +83,6 @@ class ProductModel {
         'isAvailable': isAvailable,
         'sizes': sizes.map((s) => s.toMap()).toList(),
         'extras': extras.map((e) => e.toMap()).toList(),
+        'cutlery': cutlery.map((e) => e.toMap()).toList(),
       };
 }

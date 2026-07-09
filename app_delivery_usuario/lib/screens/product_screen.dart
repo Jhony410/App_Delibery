@@ -16,6 +16,7 @@ class ProductScreen extends StatefulWidget {
 class _ProductScreenState extends State<ProductScreen> {
   int _sizeIdx = 0;
   List<bool> _extras = [];
+  List<bool> _cutlery = [];
   int _qty = 1;
   String? _storeId;
   String? _productId;
@@ -41,7 +42,10 @@ class _ProductScreenState extends State<ProductScreen> {
     final extrasTotal = product.extras.asMap().entries
         .where((e) => e.key < _extras.length && _extras[e.key])
         .fold(0.0, (sum, e) => sum + e.value.price);
-    return (base + extrasTotal) * _qty;
+    final cutleryTotal = product.cutlery.asMap().entries
+        .where((e) => e.key < _cutlery.length && _cutlery[e.key])
+        .fold(0.0, (sum, e) => sum + e.value.price);
+    return (base + extrasTotal + cutleryTotal) * _qty;
   }
 
   void _addToCart(ProductModel product) {
@@ -52,10 +56,21 @@ class _ProductScreenState extends State<ProductScreen> {
         .where((e) => e.key < _extras.length && _extras[e.key])
         .map((e) => e.value.name)
         .join(', ');
+    final selectedCutlery = product.cutlery.asMap().entries
+        .where((e) => e.key < _cutlery.length && _cutlery[e.key])
+        .map((e) => e.value.name)
+        .join(', ');
+    // Human-readable selection, stored in `note`. This is the only channel the
+    // courier and admin apps already read, so it keeps the choice visible there
+    // without touching those apps.
+    final noteParts = <String>[
+      if (selectedExtras.isNotEmpty) selectedExtras,
+      if (selectedCutlery.isNotEmpty) 'Cubiertos: $selectedCutlery',
+    ];
     CartService.addOrIncrement(CartEntry(
       productId: product.id,
       name: '${product.name}$sizeName',
-      note: selectedExtras.isEmpty ? null : selectedExtras,
+      note: noteParts.isEmpty ? null : noteParts.join(' · '),
       tone: product.tone,
       unitPrice: _computePrice(product) / _qty,
       qty: _qty,
@@ -99,6 +114,9 @@ class _ProductScreenState extends State<ProductScreen> {
         }
         if (_extras.length != product.extras.length) {
           _extras = List.filled(product.extras.length, false);
+        }
+        if (_cutlery.length != product.cutlery.length) {
+          _cutlery = List.filled(product.cutlery.length, false);
         }
 
         return Scaffold(
@@ -272,6 +290,76 @@ class _ProductScreenState extends State<ProductScreen> {
                               return GestureDetector(
                                 onTap: () => setState(
                                     () => _extras[e.key] = !_extras[e.key]),
+                                child: Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 8),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 22,
+                                        height: 22,
+                                        decoration: BoxDecoration(
+                                          color: sel
+                                              ? AppColors.primary
+                                              : Colors.white,
+                                          border: Border.all(
+                                            color: sel
+                                                ? AppColors.primary
+                                                : AppColors.border,
+                                            width: 1.5,
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: sel
+                                            ? const Icon(Icons.check,
+                                                size: 14, color: Colors.white)
+                                            : null,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(e.value.name,
+                                            style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w500)),
+                                      ),
+                                      Text(
+                                          e.value.price == 0
+                                              ? 'Gratis'
+                                              : '+${e.value.price.toStringAsFixed(2)}',
+                                          style: const TextStyle(
+                                              fontSize: 13,
+                                              color: AppColors.textMuted,
+                                              fontWeight: FontWeight.w600)),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }),
+                          ],
+                          if (product.cutlery.isNotEmpty) ...[
+                            const SizedBox(height: 22),
+                            const Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Cubiertos',
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w800)),
+                                Text('Opcional',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textMuted,
+                                        fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            ...product.cutlery.asMap().entries.map((e) {
+                              final sel =
+                                  e.key < _cutlery.length && _cutlery[e.key];
+                              return GestureDetector(
+                                onTap: () => setState(
+                                    () => _cutlery[e.key] = !_cutlery[e.key]),
                                 child: Padding(
                                   padding:
                                       const EdgeInsets.symmetric(vertical: 8),
