@@ -91,6 +91,7 @@ class _StoreScreenState extends State<StoreScreen> {
                         radius: 0,
                         tone: store.tone,
                         assetPath: assetForKey(store.id),
+                        imageUrl: store.imagenUrl,
                       ),
                       Positioned(
                         top: MediaQuery.of(context).padding.top + 10,
@@ -432,7 +433,8 @@ class _MenuItemRow extends StatelessWidget {
                     width: 96,
                     tone: item.tone,
                     radius: 12,
-                    assetPath: assetForKey(item.id)),
+                    assetPath: assetForKey(item.id),
+                    imageUrl: item.imageUrl),
                 Positioned(
                   bottom: -8,
                   right: -8,

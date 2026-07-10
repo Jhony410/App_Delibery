@@ -12,6 +12,10 @@ class StoreModel {
   final String? promo;
   final String tone;
 
+  /// Foto real del local subida desde el panel admin (Firebase Storage).
+  /// Null/vacío cuando el comercio aún no tiene foto — se usa el asset local.
+  final String? imagenUrl;
+
   const StoreModel({
     required this.id,
     required this.name,
@@ -25,6 +29,7 @@ class StoreModel {
     this.isOpen = true,
     this.promo,
     this.tone = 'warm',
+    this.imagenUrl,
   });
 
   factory StoreModel.fromMap(String id, Map<String, dynamic> m) => StoreModel(
@@ -40,6 +45,7 @@ class StoreModel {
         address: m['address'],
         promo: m['promo'],
         tone: m['tone'] ?? 'warm',
+        imagenUrl: m['imagenUrl'] ?? m['imagen_url'],
       );
 
   Map<String, dynamic> toMap() => {
@@ -54,5 +60,6 @@ class StoreModel {
         'address': address,
         'promo': promo,
         'tone': tone,
+        if (imagenUrl != null) 'imagenUrl': imagenUrl,
       };
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -41,7 +42,17 @@ class StoreMonthStats {
 class StoreService {
   static final _col = FirebaseFirestore.instance.collection('stores');
   static final _orders = FirebaseFirestore.instance.collection('orders');
-  static final _storage = FirebaseStorage.instance;
+
+  // Short retry windows so an infra failure (bucket missing, CORS, offline)
+  // surfaces as an error SnackBar in seconds instead of the SDK's 10-minute
+  // default retry loop.
+  static final _storage = FirebaseStorage.instance
+    ..setMaxUploadRetryTime(const Duration(seconds: 30))
+    ..setMaxOperationRetryTime(const Duration(seconds: 20));
+
+  /// Hard cap on the whole upload, in case the SDK retry limits don't apply
+  /// on a given platform.
+  static const _uploadTimeout = Duration(seconds: 45);
 
   // ─── Stores ──────────────────────────────────────────────────────
   /// Real-time list of all stores ordered by name.
@@ -76,6 +87,23 @@ class StoreService {
 
   static Future<void> deleteStore(String id) => _col.doc(id).delete();
 
+  /// Uploads [bytes] to [path] in Firebase Storage and returns the download
+  /// URL. Bounded by [_uploadTimeout] so callers' catch blocks fire quickly.
+  static Future<String> _uploadImage(
+      String path, Uint8List bytes, String contentType) async {
+    final ref = _storage.ref().child(path);
+    try {
+      await ref
+          .putData(bytes, SettableMetadata(contentType: contentType))
+          .timeout(_uploadTimeout);
+      return await ref.getDownloadURL().timeout(_uploadTimeout);
+    } on TimeoutException {
+      throw Exception(
+          'La subida excedió el tiempo de espera. Verifica que Cloud Storage '
+          'esté habilitado (con CORS configurado) y tu conexión.');
+    }
+  }
+
   /// Uploads a store logo/photo to `stores/{storeId}/logo.jpg` in Firebase
   /// Storage and returns its public download URL. The caller is responsible for
   /// persisting the URL onto the store document (`imagenUrl`).
@@ -83,11 +111,20 @@ class StoreService {
     String storeId,
     Uint8List bytes, {
     String contentType = 'image/jpeg',
-  }) async {
-    final ref = _storage.ref().child('stores/$storeId/logo.jpg');
-    await ref.putData(bytes, SettableMetadata(contentType: contentType));
-    return ref.getDownloadURL();
-  }
+  }) =>
+      _uploadImage('stores/$storeId/logo.jpg', bytes, contentType);
+
+  /// Uploads a product image to `stores/{storeId}/products/{productId}.jpg`
+  /// and returns its download URL. The caller persists it on the product's
+  /// existing `imageUrl` field.
+  static Future<String> uploadProductImage(
+    String storeId,
+    String productId,
+    Uint8List bytes, {
+    String contentType = 'image/jpeg',
+  }) =>
+      _uploadImage(
+          'stores/$storeId/products/$productId.jpg', bytes, contentType);
 
   /// Number of orders that reference [storeId]. Used to warn before deleting a
   /// store that still has order history. Queries the single-field `storeId`
@@ -120,6 +157,16 @@ class StoreService {
 
   static Future<void> addProduct(String storeId, ProductModel p) =>
       _products(storeId).add(p.toMap());
+
+  /// Pre-generates a product document id so an image can be uploaded to
+  /// `stores/{storeId}/products/{id}.jpg` before the document exists.
+  static String newProductId(String storeId) => _products(storeId).doc().id;
+
+  /// Creates a product under a pre-generated [productId]
+  /// (see [newProductId]).
+  static Future<void> createProduct(
+          String storeId, String productId, ProductModel p) =>
+      _products(storeId).doc(productId).set(p.toMap());
 
   static Future<void> updateProduct(
           String storeId, String productId, Map<String, dynamic> fields) =>

@@ -323,6 +323,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             tone: store.tone,
                             radius: 12,
                             assetPath: assetForKey(store.id),
+                            imageUrl: store.imagenUrl,
                           ),
                           if (store.promo != null)
                             Positioned(

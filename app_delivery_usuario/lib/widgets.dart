@@ -11,6 +11,11 @@ class ImgPlaceholder extends StatelessWidget {
   final String tone;
   final String? assetPath;
 
+  /// URL de imagen real (Firebase Storage o externa). Cuando viene no vacía se
+  /// renderiza con [Image.network]; si es null/vacía o la carga falla, se cae
+  /// al comportamiento actual ([assetPath] o el placeholder rayado).
+  final String? imageUrl;
+
   static const _tones = {
     'warm': [Color(0xFFFFE2D1), Color(0xFFFFD0B0)],
     'cool': [Color(0xFFE3ECF5), Color(0xFFC9D8E8)],
@@ -27,10 +32,41 @@ class ImgPlaceholder extends StatelessWidget {
     this.radius = 14,
     this.tone = 'warm',
     this.assetPath,
+    this.imageUrl,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (imageUrl != null && imageUrl!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: SizedBox(
+          width: width,
+          height: height,
+          child: Image.network(
+            imageUrl!,
+            fit: BoxFit.cover,
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return Container(
+                color: (_tones[tone] ?? _tones['warm']!)[0],
+                alignment: Alignment.center,
+                child: const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              );
+            },
+            errorBuilder: (context, error, stack) => _buildFallback(),
+          ),
+        ),
+      );
+    }
+    return _buildFallback();
+  }
+
+  Widget _buildFallback() {
     if (assetPath != null) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(radius),

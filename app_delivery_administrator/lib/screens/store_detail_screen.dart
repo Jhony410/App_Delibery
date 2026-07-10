@@ -1154,12 +1154,18 @@ class _ProductDialogState extends State<ProductDialog> {
   late final TextEditingController _imageUrl;
   late bool _isAvailable;
 
+  /// Document id the product is (or will be) stored under. Pre-generated for
+  /// new products so the image can be uploaded to
+  /// `stores/{storeId}/products/{id}.jpg` before the first save.
+  late final String _productId;
+
   // Option groups — mirror the customer app's product schema.
   late final List<_OptionRow> _sizes;
   late final List<_OptionRow> _extras;
   late final List<_OptionRow> _cutlery;
 
   bool _saving = false;
+  bool _uploadingImage = false;
   String? _error;
 
   bool get _isEdit => widget.product != null;
@@ -1168,12 +1174,17 @@ class _ProductDialogState extends State<ProductDialog> {
   void initState() {
     super.initState();
     final p = widget.product;
+    _productId = p?.id ?? StoreService.newProductId(widget.storeId);
     _name = TextEditingController(text: p?.name ?? '');
     _description = TextEditingController(text: p?.description ?? '');
     _price =
         TextEditingController(text: p == null ? '' : p.price.toStringAsFixed(2));
     _category = TextEditingController(text: p?.category ?? '');
     _imageUrl = TextEditingController(text: p?.imageUrl ?? '');
+    // Rebuild so the preview thumb tracks manual edits of the URL field too.
+    _imageUrl.addListener(() {
+      if (mounted) setState(() {});
+    });
     _isAvailable = p?.isAvailable ?? true;
     _sizes = (p?.sizes ?? []).map(_OptionRow.fromOption).toList();
     _extras = (p?.extras ?? []).map(_OptionRow.fromOption).toList();
@@ -1191,6 +1202,46 @@ class _ProductDialogState extends State<ProductDialog> {
       r.dispose();
     }
     super.dispose();
+  }
+
+  Future<void> _pickAndUploadImage() async {
+    final XFile? file;
+    try {
+      file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        imageQuality: 85,
+      );
+    } catch (e) {
+      widget.onSnack('No se pudo abrir el selector de imagen: $e',
+          error: true);
+      return;
+    }
+    if (file == null) return; // user cancelled
+    setState(() {
+      _uploadingImage = true;
+      _error = null;
+    });
+    try {
+      final bytes = await file.readAsBytes();
+      final url = await StoreService.uploadProductImage(
+        widget.storeId,
+        _productId,
+        bytes,
+        contentType: file.mimeType ?? 'image/jpeg',
+      );
+      if (!mounted) return;
+      setState(() {
+        _imageUrl.text = url;
+        _uploadingImage = false;
+      });
+      widget.onSnack(
+          'Imagen subida. Guarda el producto para aplicar el cambio.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _uploadingImage = false);
+      widget.onSnack('No se pudo subir la imagen: $e', error: true);
+    }
   }
 
   void _addRow(List<_OptionRow> group) =>
@@ -1241,7 +1292,7 @@ class _ProductDialogState extends State<ProductDialog> {
       _error = null;
     });
     final model = ProductModel(
-      id: widget.product?.id ?? '',
+      id: _productId,
       name: name,
       description: _description.text.trim(),
       price: price,
@@ -1257,7 +1308,7 @@ class _ProductDialogState extends State<ProductDialog> {
         await StoreService.updateProduct(
             widget.storeId, widget.product!.id, model.toMap());
       } else {
-        await StoreService.addProduct(widget.storeId, model);
+        await StoreService.createProduct(widget.storeId, _productId, model);
       }
       if (!mounted) return;
       Navigator.pop(context);
@@ -1319,9 +1370,12 @@ class _ProductDialogState extends State<ProductDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              AdminTextField(
-                  label: 'URL de imagen', controller: _imageUrl),
+              const SizedBox(height: 16),
+              _ProductImageField(
+                controller: _imageUrl,
+                uploading: _uploadingImage,
+                onPick: _pickAndUploadImage,
+              ),
               const SizedBox(height: 20),
               _OptionGroup(
                 title: 'Tamaño',
@@ -1390,6 +1444,81 @@ class _ProductDialogState extends State<ProductDialog> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Product image controls inside [ProductDialog]: a live preview thumb, the
+/// primary "upload file" button, and the manual URL text field as fallback.
+/// Both paths write into [controller], so the save flow keeps persisting the
+/// existing `imageUrl` field unchanged.
+class _ProductImageField extends StatelessWidget {
+  final TextEditingController controller;
+  final bool uploading;
+  final VoidCallback onPick;
+  const _ProductImageField({
+    required this.controller,
+    required this.uploading,
+    required this.onPick,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final url = controller.text.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const AdminEyebrow('IMAGEN DEL PRODUCTO'),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: 56,
+                height: 56,
+                color: AdminColors.grayTint,
+                child: url.isEmpty
+                    ? const Icon(Icons.restaurant_menu,
+                        size: 20, color: AdminColors.textMuted)
+                    : Image.network(
+                        url,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => const Icon(
+                            Icons.broken_image_outlined,
+                            size: 20,
+                            color: AdminColors.textMuted),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AdminButton(
+                    label: url.isEmpty ? 'Subir imagen' : 'Reemplazar imagen',
+                    icon: Icons.upload_outlined,
+                    size: AdminBtnSize.sm,
+                    loading: uploading,
+                    onPressed: onPick,
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Se sube a Firebase Storage y se guarda con el producto.',
+                    style:
+                        TextStyle(fontSize: 11, color: AdminColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        AdminTextField(
+            label: 'URL de imagen (alternativa manual)',
+            controller: controller),
+      ],
     );
   }
 }

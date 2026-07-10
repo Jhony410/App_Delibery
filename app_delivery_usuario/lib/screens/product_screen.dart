@@ -133,6 +133,7 @@ class _ProductScreenState extends State<ProductScreen> {
                         radius: 0,
                         tone: product.tone,
                         assetPath: assetForKey(product.id),
+                        imageUrl: product.imageUrl,
                       ),
                       Positioned(
                         top: MediaQuery.of(context).padding.top + 10,

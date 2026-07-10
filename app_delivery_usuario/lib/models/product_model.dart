@@ -36,6 +36,10 @@ class ProductModel {
   final List<ProductExtra> cutlery;
   final bool isAvailable;
 
+  /// Imagen real del producto (subida desde el panel admin a Firebase Storage
+  /// o pegada como URL externa). Null/vacío = usar el asset local.
+  final String? imageUrl;
+
   const ProductModel({
     required this.id,
     required this.storeId,
@@ -49,6 +53,7 @@ class ProductModel {
     this.extras = const [],
     this.cutlery = const [],
     this.isAvailable = true,
+    this.imageUrl,
   });
 
   factory ProductModel.fromMap(String id, String storeId, Map<String, dynamic> m) =>
@@ -62,6 +67,7 @@ class ProductModel {
         badge: m['badge'],
         category: m['category'] ?? 'Destacados',
         isAvailable: m['isAvailable'] ?? true,
+        imageUrl: m['imageUrl'] ?? m['imagen_url'],
         sizes: (m['sizes'] as List? ?? [])
             .map((s) => ProductVariant.fromMap(Map<String, dynamic>.from(s)))
             .toList(),
@@ -81,6 +87,7 @@ class ProductModel {
         'badge': badge,
         'category': category,
         'isAvailable': isAvailable,
+        if (imageUrl != null) 'imageUrl': imageUrl,
         'sizes': sizes.map((s) => s.toMap()).toList(),
         'extras': extras.map((e) => e.toMap()).toList(),
         'cutlery': cutlery.map((e) => e.toMap()).toList(),

@@ -155,6 +155,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                               tone: store.tone,
                                               radius: 10,
                                               assetPath: assetForKey(store.id),
+                                              imageUrl: store.imagenUrl,
                                             ),
                                             const SizedBox(width: 12),
                                             Expanded(
