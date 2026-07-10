@@ -237,6 +237,11 @@ El sistema funciona end-to-end en desarrollo. Las tres apps están conectadas a 
 **Proyecto Firebase:** `delypuno-ddd2d`
 **Año:** 2026
 
+**Autor:** Mildward Condori
+**Email:** mildwardcondori@gmail.com
+**Proyecto Firebase:** `delypuno-ddd2d`
+**Año:** 2026
+
 ---
 
 ## 📝 Licencia
