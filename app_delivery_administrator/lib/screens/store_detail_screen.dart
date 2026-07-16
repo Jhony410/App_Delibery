@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import '../models/product_model.dart';
@@ -17,6 +20,21 @@ const _monthAbbr = [
 
 String _fmtDate(DateTime d) =>
     '${d.day} ${_monthAbbr[d.month - 1]} ${d.year}';
+
+/// Re-encodes [input] as a JPEG bounded to [maxWidth] px wide at [quality]
+/// (0-100) so uploads to Storage stay small. Only downsizes — images already
+/// narrower than [maxWidth] keep their resolution. Returns the original bytes
+/// untouched if decoding fails (e.g. an unsupported format), so a bad decode
+/// never blocks the upload.
+Uint8List _compressToJpeg(Uint8List input,
+    {int maxWidth = 900, int quality = 80}) {
+  final decoded = img.decodeImage(input);
+  if (decoded == null) return input;
+  final resized = decoded.width > maxWidth
+      ? img.copyResize(decoded, width: maxWidth)
+      : decoded;
+  return img.encodeJpg(resized, quality: quality);
+}
 
 String _money(double v) {
   final neg = v < 0;
@@ -199,11 +217,13 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
     if (file == null) return; // user cancelled
     setState(() => _uploadingImage = true);
     try {
-      final bytes = await file.readAsBytes();
+      final raw = await file.readAsBytes();
+      // Compress client-side (≤900px wide, JPEG q80) to keep Storage small.
+      final bytes = _compressToJpeg(raw);
       final url = await StoreService.uploadStoreLogo(
         _store.id,
         bytes,
-        contentType: file.mimeType ?? 'image/jpeg',
+        contentType: 'image/jpeg',
       );
       await StoreService.updateStore(_store.id, {'imagenUrl': url});
       setState(() {
@@ -1223,12 +1243,14 @@ class _ProductDialogState extends State<ProductDialog> {
       _error = null;
     });
     try {
-      final bytes = await file.readAsBytes();
+      final raw = await file.readAsBytes();
+      // Compress client-side (≤900px wide, JPEG q80) to keep Storage small.
+      final bytes = _compressToJpeg(raw);
       final url = await StoreService.uploadProductImage(
         widget.storeId,
         _productId,
         bytes,
-        contentType: file.mimeType ?? 'image/jpeg',
+        contentType: 'image/jpeg',
       );
       if (!mounted) return;
       setState(() {

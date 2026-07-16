@@ -1,8 +1,14 @@
 [
   {
     "origin": ["*"],
-    "method": ["GET", "PUT", "POST", "HEAD"],
+    "method": ["GET", "HEAD", "PUT", "POST"],
     "maxAgeSeconds": 3600,
-    "responseHeader": ["Content-Type", "x-goog-resumable"]
+    "responseHeader": [
+      "Content-Type",
+      "Content-Length",
+      "Content-Range",
+      "Accept-Ranges",
+      "x-goog-resumable"
+    ]
   }
 ]
