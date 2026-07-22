@@ -55,6 +55,9 @@ class OrderModel {
   // being offered the order while it is still 'confirmed'. Used as a fallback
   // to resolve the courier's identity for the tracking card.
   final String? assignedCourierId;
+  // True once the customer has rated this order (set by the rating screen).
+  // Absent on older orders — treated as false when missing.
+  final bool rated;
   final DateTime createdAt;
 
   const OrderModel({
@@ -74,6 +77,7 @@ class OrderModel {
     this.courierId,
     this.courierName,
     this.assignedCourierId,
+    this.rated = false,
     required this.createdAt,
   });
 
@@ -96,6 +100,7 @@ class OrderModel {
         courierId: m['courierId'] as String?,
         courierName: m['courierName'] as String?,
         assignedCourierId: m['assignedCourierId'] as String?,
+        rated: m['rated'] ?? false,
         createdAt: (m['createdAt'] as Timestamp).toDate(),
       );
 

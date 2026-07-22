@@ -5,6 +5,37 @@ import 'search_screen.dart';
 import 'history_screen.dart';
 import 'profile_screen.dart';
 
+/// Lets the bottom-tab screens drive the shell: switch tabs and open the
+/// Buscar tab pre-filtered by a category. Exposed via an [InheritedWidget] so
+/// children reach it with `MainShellScope.of(context)`.
+class MainShellScope extends InheritedWidget {
+  final void Function(int index) goToTab;
+
+  /// Category slug the Buscar tab should filter by. `null` means "no filter"
+  /// (show every store). Home writes to it and switches to the Buscar tab.
+  final ValueNotifier<String?> searchCategory;
+
+  const MainShellScope({
+    super.key,
+    required this.goToTab,
+    required this.searchCategory,
+    required super.child,
+  });
+
+  /// Opens the Buscar tab (index 1 in the bottom nav) applying [slug], or
+  /// clearing the filter when null.
+  void openSearch(String? slug) {
+    searchCategory.value = slug;
+    goToTab(1);
+  }
+
+  static MainShellScope? of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<MainShellScope>();
+
+  @override
+  bool updateShouldNotify(MainShellScope oldWidget) => false;
+}
+
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -14,6 +45,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _tab = 0;
+  final _searchCategory = ValueNotifier<String?>(null);
 
   static const _screens = [
     HomeScreen(),
@@ -23,12 +55,24 @@ class _MainShellState extends State<MainShell> {
   ];
 
   @override
+  void dispose() {
+    _searchCategory.dispose();
+    super.dispose();
+  }
+
+  void _goToTab(int i) => setState(() => _tab = i);
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(index: _tab, children: _screens),
-      bottomNavigationBar: _AppBottomNavBar(
-        activeIndex: _tab,
-        onTap: (i) => setState(() => _tab = i),
+    return MainShellScope(
+      goToTab: _goToTab,
+      searchCategory: _searchCategory,
+      child: Scaffold(
+        body: IndexedStack(index: _tab, children: _screens),
+        bottomNavigationBar: _AppBottomNavBar(
+          activeIndex: _tab,
+          onTap: _goToTab,
+        ),
       ),
     );
   }

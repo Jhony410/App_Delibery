@@ -4,6 +4,8 @@ import '../models/product_model.dart';
 import '../models/order_model.dart';
 import '../models/user_model.dart';
 import '../models/address_model.dart';
+import '../models/favorite_model.dart';
+import '../models/notification_model.dart';
 
 class DbService {
   static final _db = FirebaseFirestore.instance;
@@ -108,6 +110,10 @@ class DbService {
   static Future<void> updateOrderStatus(String orderId, String status) =>
       _db.collection('orders').doc(orderId).update({'status': status});
 
+  /// Flags an order as rated so the "Calificar" action is only offered once.
+  static Future<void> markOrderRated(String orderId) =>
+      _db.collection('orders').doc(orderId).update({'rated': true});
+
   // ── Couriers (read-only; owned by the courier app) ────────
   /// Live view of the courier assigned to an order, so the tracking screen can
   /// show the real driver instead of a placeholder. Returns null until a
@@ -128,6 +134,86 @@ class DbService {
   static Future<void> updateUser(String uid, Map<String, dynamic> data) =>
       _db.collection('users').doc(uid).update(data);
 
+  /// Live view of the `users/{uid}` doc so profile stats refresh on their own.
+  static Stream<UserModel?> streamUser(String uid) => _db
+      .collection('users')
+      .doc(uid)
+      .snapshots()
+      .map((d) => d.exists ? UserModel.fromMap(uid, d.data()!) : null);
+
+  // ── Favorites ─────────────────────────────────────────────
+  static Future<List<FavoriteModel>> getUserFavorites(String uid) async {
+    final snap =
+        await _db.collection('users').doc(uid).collection('favorites').get();
+    return snap.docs.map((d) => FavoriteModel.fromMap(d.id, d.data())).toList();
+  }
+
+  static Stream<List<FavoriteModel>> streamUserFavorites(String uid) => _db
+      .collection('users')
+      .doc(uid)
+      .collection('favorites')
+      .snapshots()
+      .map((s) =>
+          s.docs.map((d) => FavoriteModel.fromMap(d.id, d.data())).toList());
+
+  static Future<bool> isFavorite(String uid, String storeId) async {
+    final doc = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('favorites')
+        .doc(storeId)
+        .get();
+    return doc.exists;
+  }
+
+  /// Adds or removes `users/{uid}/favorites/{storeId}`. Returns the resulting
+  /// favourite state (true = now a favourite). The doc id is the storeId so the
+  /// operation is idempotent.
+  static Future<bool> toggleFavorite(
+      String uid, String storeId, String storeName) async {
+    final ref = _db
+        .collection('users')
+        .doc(uid)
+        .collection('favorites')
+        .doc(storeId);
+    final doc = await ref.get();
+    if (doc.exists) {
+      await ref.delete();
+      return false;
+    }
+    await ref.set(
+        FavoriteModel(storeId: storeId, storeName: storeName).toMap());
+    return true;
+  }
+
+  // ── Notifications ─────────────────────────────────────────
+  static Stream<List<NotificationModel>> streamUserNotifications(String uid) =>
+      _db
+          .collection('users')
+          .doc(uid)
+          .collection('notifications')
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map((s) => s.docs
+              .map((d) => NotificationModel.fromMap(d.id, d.data()))
+              .toList());
+
+  static Stream<int> countUnreadNotifications(String uid) => _db
+      .collection('users')
+      .doc(uid)
+      .collection('notifications')
+      .where('read', isEqualTo: false)
+      .snapshots()
+      .map((s) => s.docs.length);
+
+  static Future<void> markNotificationRead(String uid, String notificationId) =>
+      _db
+          .collection('users')
+          .doc(uid)
+          .collection('notifications')
+          .doc(notificationId)
+          .update({'read': true});
+
   // ── Addresses ─────────────────────────────────────────────
   static Future<List<AddressModel>> getUserAddresses(String uid) async {
     final snap = await _db
@@ -140,8 +226,40 @@ class DbService {
         .toList();
   }
 
+  /// The address marked as default, or the first saved one if none is marked.
+  /// Returns null when the user has no saved addresses.
+  static Future<AddressModel?> getDefaultAddress(String uid) async {
+    final list = await getUserAddresses(uid);
+    if (list.isEmpty) return null;
+    for (final a in list) {
+      if (a.isDefault) return a;
+    }
+    return list.first;
+  }
+
   static Future<void> addAddress(String uid, AddressModel address) =>
       _db.collection('users').doc(uid).collection('addresses').add(address.toMap());
+
+  static Future<void> updateAddress(
+          String uid, String addressId, AddressModel address) =>
+      _db
+          .collection('users')
+          .doc(uid)
+          .collection('addresses')
+          .doc(addressId)
+          .update(address.toMap());
+
+  /// Marks [addressId] as the default one, clearing the flag on every other
+  /// saved address in a single atomic batch so only one stays true.
+  static Future<void> setDefaultAddress(String uid, String addressId) async {
+    final col = _db.collection('users').doc(uid).collection('addresses');
+    final snap = await col.get();
+    final batch = _db.batch();
+    for (final doc in snap.docs) {
+      batch.update(doc.reference, {'isDefault': doc.id == addressId});
+    }
+    await batch.commit();
+  }
 
   static Future<void> deleteAddress(String uid, String addressId) =>
       _db

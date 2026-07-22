@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import '../models/address_model.dart';
 import '../services/cart_service.dart';
+import 'addresses_screen.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -11,6 +13,19 @@ class CartScreen extends StatefulWidget {
 }
 
 class _CartScreenState extends State<CartScreen> {
+  // Checkout: elige dirección en /addresses (modo select). El carrito es el
+  // único que avanza a /summary tras recibir la dirección elegida.
+  Future<void> _goToCheckout() async {
+    final chosen = await Navigator.pushNamed(context, '/addresses',
+        arguments: AddressListMode.select);
+    if (!mounted) return;
+    if (chosen is AddressModel) {
+      CartService.selectedAddress = chosen.street;
+      CartService.selectedAddressRef = chosen.reference;
+      Navigator.pushNamed(context, '/summary');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final groups = CartService.groups;
@@ -82,7 +97,7 @@ class _CartScreenState extends State<CartScreen> {
                     const SizedBox(height: 14),
                     AppButton(
                       label: 'Ir a pagar',
-                      onTap: () => Navigator.pushNamed(context, '/address'),
+                      onTap: _goToCheckout,
                     ),
                   ],
                 ),

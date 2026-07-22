@@ -12,13 +12,18 @@ import 'screens/main_shell.dart';
 import 'screens/store_screen.dart';
 import 'screens/product_screen.dart';
 import 'screens/cart_screen.dart';
-import 'screens/address_screen.dart';
+import 'screens/addresses_screen.dart';
+import 'screens/address_form_screen.dart';
 import 'screens/summary_screen.dart';
 import 'screens/payment_screen.dart';
 import 'screens/confirmed_screen.dart';
 import 'screens/tracking_screen.dart';
 import 'screens/rating_screen.dart';
 import 'screens/chat_screen.dart';
+import 'screens/notifications_screen.dart';
+import 'screens/favorites_screen.dart';
+import 'screens/help_screen.dart';
+import 'screens/order_detail_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,13 +52,18 @@ class DeliPunoApp extends StatelessWidget {
         '/store': (ctx) => const StoreScreen(),
         '/product': (ctx) => const ProductScreen(),
         '/cart': (ctx) => const CartScreen(),
-        '/address': (ctx) => const AddressScreen(),
+        '/addresses': (ctx) => const AddressesScreen(),
+        '/address-form': (ctx) => const AddressFormScreen(),
         '/summary': (ctx) => const SummaryScreen(),
         '/payment': (ctx) => const PaymentScreen(),
         '/confirmed': (ctx) => const ConfirmedScreen(),
         '/tracking': (ctx) => const TrackingScreen(),
         '/rating': (ctx) => const RatingScreen(),
         '/chat': (ctx) => const ChatScreen(),
+        '/notifications': (ctx) => const NotificationsScreen(),
+        '/favorites': (ctx) => const FavoritesScreen(),
+        '/help': (ctx) => const HelpScreen(),
+        '/order-detail': (ctx) => const OrderDetailScreen(),
       },
     );
   }

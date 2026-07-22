@@ -1,8 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Ubicación: necesaria para centrar el mapa en la posición del usuario. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
         android:label="app_delivery_usuario"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Google Maps SDK: la clave vive solo aquí (y en web/index.html),
+             nunca hardcodeada en código Dart. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyBbyT0EdGVcRlbHNxekXIN0Tw_0MmZjDIQ"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

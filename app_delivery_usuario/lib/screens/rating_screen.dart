@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import '../services/db_service.dart';
 
 class RatingScreen extends StatefulWidget {
   const RatingScreen({super.key});
@@ -12,6 +13,22 @@ class RatingScreen extends StatefulWidget {
 class _RatingScreenState extends State<RatingScreen> {
   int _storeRating = 5;
   int _driverRating = 4;
+
+  Future<void> _submit() async {
+    // The order id is passed as the route argument (from order_detail_screen).
+    // When present we flag the order as rated so it won't be offered again.
+    final orderId = ModalRoute.of(context)?.settings.arguments as String?;
+    if (orderId != null && orderId.isNotEmpty) {
+      try {
+        await DbService.markOrderRated(orderId);
+      } catch (_) {
+        // Non-blocking: still let the user finish even if the write fails.
+      }
+    }
+    if (mounted) {
+      Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -213,9 +230,7 @@ class _RatingScreenState extends State<RatingScreen> {
               color: Colors.white,
               child: AppButton(
                 label: 'Enviar calificación',
-                onTap: () =>
-                    Navigator.pushNamedAndRemoveUntil(
-                        context, '/home', (_) => false),
+                onTap: _submit,
               ),
             ),
           ),
