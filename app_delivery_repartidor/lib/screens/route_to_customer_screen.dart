@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/order_model.dart';
+import '../services/external_maps.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import '../widgets/courier_map.dart';
 
 class RouteToCustomerScreen extends StatelessWidget {
   final OrderModel order;
@@ -9,18 +11,32 @@ class RouteToCustomerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // No customer coordinates on OrderModel yet — show only the courier's live
+    // position. Pass `destination` here once lat/lng propagate from the client.
     return Scaffold(
       backgroundColor: CourierColors.bg,
       body: Stack(
         children: [
-          const Positioned.fill(child: DarkMapBackground(withRoute: true)),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).maybePop(),
+          Positioned.fill(
+            child: CourierMap(
+              destinationLabel: order.customerName ?? 'Cliente',
+              loadingLabel: 'Buscando ruta al cliente',
+            ),
+          ),
+          // Top-anchored, content-height header floating over the map.
+          // Positioned(top/left/right) with no bottom means it takes only its
+          // content height and can never stretch to fill the Stack.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).maybePop(),
                     child: Container(
                       width: 44,
                       height: 44,
@@ -37,7 +53,7 @@ class RouteToCustomerScreen extends StatelessWidget {
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 14),
+                          horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
                         color: CourierColors.surface,
                         borderRadius: BorderRadius.circular(16),
@@ -54,18 +70,18 @@ class RouteToCustomerScreen extends StatelessWidget {
                             ),
                             alignment: Alignment.center,
                             child: const Icon(
-                              Icons.navigation_rounded,
-                              size: 24,
+                              Icons.person_pin_circle_rounded,
+                              size: 22,
                               color: CourierColors.onOnline,
                             ),
                           ),
                           const SizedBox(width: 14),
-                          const Expanded(
+                          Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'EN 800 m',
+                                const Text(
+                                  'ENTREGAR A',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: CourierColors.textMuted,
@@ -73,10 +89,12 @@ class RouteToCustomerScreen extends StatelessWidget {
                                     letterSpacing: 0.8,
                                   ),
                                 ),
-                                SizedBox(height: 2),
+                                const SizedBox(height: 2),
                                 Text(
-                                  'Continúa por Av. Arequipa',
-                                  style: TextStyle(
+                                  order.customerName ?? 'Cliente',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
                                     fontSize: 17,
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: -0.2,
@@ -90,7 +108,8 @@ class RouteToCustomerScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -185,36 +204,16 @@ class RouteToCustomerScreen extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: CourierColors.surface2,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: const [
-                          Text(
-                            '3 min · 0.6 km',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: CourierColors.text,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          Text(
-                            '● A tiempo',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: CourierColors.online,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
+                    // Real turn-by-turn is delegated to the phone's Google Maps
+                    // (no in-app Directions API). Opens a search for the address.
+                    CButton(
+                      label: 'Abrir en Google Maps',
+                      icon: Icons.map_outlined,
+                      size: CButtonSize.lg,
+                      variant: CButtonVariant.ghost,
+                      onPressed: () => _openMaps(context),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 10),
                     CButton(
                       label: 'Llegué al cliente',
                       icon: Icons.check_circle_outline,
@@ -234,6 +233,20 @@ class RouteToCustomerScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _openMaps(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final query = order.address.trim().isNotEmpty
+        ? order.address
+        : (order.customerName ?? '');
+    final ok = await ExternalMaps.open(query: query);
+    if (!ok) {
+      messenger.showSnackBar(const SnackBar(
+        content: Text('No se pudo abrir Google Maps.'),
+        backgroundColor: CourierColors.danger,
+      ));
+    }
   }
 
   String _initials(String n) {

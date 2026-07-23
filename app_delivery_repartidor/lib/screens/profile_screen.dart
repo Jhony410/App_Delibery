@@ -272,21 +272,92 @@ class _ItemList extends StatelessWidget {
   final CourierModel? courier;
   const _ItemList({required this.courier});
 
+  String _maskAccount(String acc) {
+    final t = acc.trim();
+    if (t.length <= 4) return t;
+    return '•••• ${t.substring(t.length - 4)}';
+  }
+
+  Future<void> _confirmSignOut(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: CourierColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+        title: const Text(
+          'Cerrar sesión',
+          style: TextStyle(
+            color: CourierColors.text,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+          ),
+        ),
+        content: const Text(
+          '¿Seguro que quieres cerrar sesión?',
+          style: TextStyle(color: CourierColors.textMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar',
+                style: TextStyle(color: CourierColors.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(
+              'Cerrar sesión',
+              style: TextStyle(
+                color: CourierColors.danger,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await AuthService.signOut();
+    if (context.mounted) {
+      Navigator.of(context)
+          .pushNamedAndRemoveUntil('/login', (_) => false);
+    }
+  }
+
+  // Real verification state derived from the courier's `status` field (no more
+  // invented "Licencia, SOAT · Vigentes").
+  (String, String?, Color?) _verification(CourierModel? c) {
+    switch (c?.status) {
+      case 'active':
+        return ('Cuenta verificada', 'OK', CourierColors.online);
+      case 'suspended':
+        return ('Cuenta suspendida', 'SUSPENDIDA', CourierColors.danger);
+      case 'pending_review':
+      default:
+        return ('En revisión por el equipo', 'PENDIENTE', CourierColors.warning);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final (verifDesc, verifTag, verifColor) = _verification(courier);
+
     final items = <_ProfileItem>[
       _ProfileItem(
         icon: Icons.person_outline_rounded,
         label: 'Datos personales',
-        desc: 'DNI, contacto, dirección',
-        onTap: () {},
+        desc: 'Nombre, teléfono, DNI',
+        onTap: () => Navigator.of(context).pushNamed('/personal-data'),
       ),
       _ProfileItem(
-        icon: Icons.description_outlined,
-        label: 'Documentos',
-        desc: 'Licencia, SOAT · Vigentes',
-        tag: 'OK',
-        tagColor: CourierColors.online,
+        icon: Icons.verified_user_outlined,
+        label: 'Estado de la cuenta',
+        // Real status, not fabricated document validity.
+        desc: verifDesc,
+        tag: verifTag,
+        tagColor: verifColor,
+        info: true,
         onTap: () {},
       ),
       _ProfileItem(
@@ -295,39 +366,31 @@ class _ItemList extends StatelessWidget {
         desc: courier?.vehicleModel.isNotEmpty ?? false
             ? '${courier!.vehicleModel} · ${courier!.vehiclePlate}'
             : 'Sin registrar',
-        onTap: () {},
+        onTap: () => Navigator.of(context).pushNamed('/vehicle'),
       ),
       _ProfileItem(
         icon: Icons.credit_card_outlined,
         label: 'Cuenta bancaria',
         desc: courier?.bankAccount.isNotEmpty ?? false
-            ? courier!.bankAccount
+            ? _maskAccount(courier!.bankAccount)
             : 'Sin registrar',
-        onTap: () {},
+        onTap: () => Navigator.of(context).pushNamed('/bank-account'),
       ),
       _ProfileItem(
         icon: Icons.help_outline_rounded,
         label: 'Ayuda y soporte',
-        onTap: () {},
+        onTap: () => Navigator.of(context).pushNamed('/help'),
       ),
       _ProfileItem(
         icon: Icons.shield_outlined,
         label: 'Seguridad y privacidad',
-        onTap: () {},
+        onTap: () => Navigator.of(context).pushNamed('/security'),
       ),
       _ProfileItem(
         icon: Icons.logout_rounded,
         label: 'Cerrar sesión',
         danger: true,
-        onTap: () async {
-          await AuthService.signOut();
-          if (context.mounted) {
-            Navigator.of(context).pushNamedAndRemoveUntil(
-              '/login',
-              (_) => false,
-            );
-          }
-        },
+        onTap: () => _confirmSignOut(context),
       ),
     ];
 
@@ -400,7 +463,7 @@ class _ItemList extends StatelessWidget {
                     StatusPill(
                         text: it.tag!,
                         color: it.tagColor ?? CourierColors.online),
-                  if (!it.danger)
+                  if (!it.danger && !it.info)
                     const Padding(
                       padding: EdgeInsets.only(left: 8),
                       child: Icon(
@@ -426,6 +489,7 @@ class _ProfileItem {
   final String? tag;
   final Color? tagColor;
   final bool danger;
+  final bool info; // informational row: no navigation chevron
   final VoidCallback onTap;
 
   _ProfileItem({
@@ -435,6 +499,7 @@ class _ProfileItem {
     this.tag,
     this.tagColor,
     this.danger = false,
+    this.info = false,
     required this.onTap,
   });
 }

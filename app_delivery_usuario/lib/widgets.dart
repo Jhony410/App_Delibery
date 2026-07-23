@@ -540,3 +540,50 @@ class SectionTitle extends StatelessWidget {
     );
   }
 }
+
+/// Confirmation shown when the user tries to add a product from a different
+/// store than the one already in the cart (the cart is single-store).
+/// Returns true if the user chose to empty the cart and add the new product.
+Future<bool> showReplaceCartDialog(
+  BuildContext context, {
+  required String currentStoreName,
+}) async {
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      title: const Text(
+        'Solo puedes pedir de una tienda',
+        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+      ),
+      content: Text(
+        'Tu carrito tiene productos de "$currentStoreName". Solo puedes pedir '
+        'de una tienda a la vez. ¿Quieres vaciar el carrito y agregar este '
+        'producto?',
+        style: const TextStyle(
+            fontSize: 14, height: 1.45, color: AppColors.textMuted),
+      ),
+      actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text(
+            'Cancelar',
+            style: TextStyle(
+                color: AppColors.textMuted, fontWeight: FontWeight.w700),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: const Text(
+            'Vaciar carrito y agregar',
+            style: TextStyle(
+                color: AppColors.primary, fontWeight: FontWeight.w800),
+          ),
+        ),
+      ],
+    ),
+  );
+  return result ?? false;
+}

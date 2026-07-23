@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import '../models/order_model.dart';
+import '../models/store_model.dart';
 import '../services/db_service.dart';
 import '../services/auth_service.dart';
 import '../services/cart_service.dart';
@@ -44,12 +45,27 @@ class _PaymentScreenState extends State<PaymentScreen> {
     if (uid == null || CartService.items.isEmpty) return;
     setState(() => _loading = true);
     try {
+      // Store identity MUST come from the cart's items, not the browsing
+      // context (CartService.storeId/storeName/... get overwritten every time
+      // the user merely opens another store screen). Sourcing them from the
+      // items guarantees the order keeps the store the products belong to, and
+      // that id/name/tone/address are all coherent.
+      final storeId = CartService.cartStoreId ?? '';
+      // Pull that same store's real address so the courier app can show the
+      // pickup location. A read hiccup must not block checkout — fall back null.
+      StoreModel? store;
+      try {
+        store = await DbService.getStore(storeId);
+      } catch (_) {
+        store = null;
+      }
       final order = OrderModel(
         id: '',
         userId: uid,
-        storeId: CartService.storeId ?? '',
-        storeName: CartService.storeName ?? '',
-        storeTone: CartService.storeTone ?? 'warm',
+        storeId: storeId,
+        storeName: CartService.cartStoreName ?? '',
+        storeTone: CartService.cartStoreTone ?? 'warm',
+        storeAddress: store?.address,
         items: CartService.toOrderItems(),
         subtotal: CartService.subtotal,
         deliveryFee: CartService.deliveryFee,

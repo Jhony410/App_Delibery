@@ -86,7 +86,7 @@ class SummaryScreen extends StatelessWidget {
                                           letterSpacing: 0.06)),
                                   const SizedBox(height: 3),
                                   Text(
-                                      'Lo antes posible · ${CartService.deliveryTime ?? '--'} min',
+                                      'Lo antes posible · ${CartService.cartDeliveryTime ?? '--'} min',
                                       style: const TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w700)),

@@ -18,8 +18,40 @@ class CourierService {
   static Future<void> updateCourier(String uid, Map<String, dynamic> data) =>
       _db.collection('couriers').doc(uid).update(data);
 
-  static Future<void> setOnline(String uid, bool online) =>
-      _db.collection('couriers').doc(uid).update({'online': online});
+  /// Toggle the courier online/offline while tracking session time.
+  ///
+  /// Going online stamps `onlineSince`. Going offline reads it, adds the elapsed
+  /// seconds to today's `onlineByDay` bucket and clears the stamp. Runs in a
+  /// transaction so the accumulation can't race with a concurrent read. All
+  /// fields live on `couriers/{uid}`, which the courier already owns — no rules
+  /// change needed.
+  static Future<void> setOnline(String uid, bool online) async {
+    final ref = _db.collection('couriers').doc(uid);
+    if (online) {
+      await ref.update({
+        'online': true,
+        'onlineSince': FieldValue.serverTimestamp(),
+      });
+      return;
+    }
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      final data = snap.data();
+      final updates = <String, dynamic>{
+        'online': false,
+        'onlineSince': null,
+      };
+      final since = (data?['onlineSince'] as Timestamp?)?.toDate();
+      if (since != null) {
+        final elapsed = DateTime.now().difference(since).inSeconds;
+        if (elapsed > 0) {
+          final key = CourierModel.dayKey(DateTime.now());
+          updates['onlineByDay.$key'] = FieldValue.increment(elapsed);
+        }
+      }
+      tx.update(ref, updates);
+    });
+  }
 
   static Future<void> incrementDelivery(String uid, double earning) =>
       _db.collection('couriers').doc(uid).update({
@@ -40,6 +72,18 @@ class CourierService {
       .map((s) => s.docs.isEmpty
           ? null
           : CourierNotice.fromMap(s.docs.first.id, s.docs.first.data()));
+
+  /// Full recent notification feed for the bell on the home screen.
+  static Stream<List<CourierNotice>> streamNotices(String uid) => _db
+      .collection('couriers')
+      .doc(uid)
+      .collection('notifications')
+      .orderBy('createdAt', descending: true)
+      .limit(30)
+      .snapshots()
+      .map((s) => s.docs
+          .map((d) => CourierNotice.fromMap(d.id, d.data()))
+          .toList());
 
   static Future<void> markNoticeRead(String uid, String noticeId) => _db
       .collection('couriers')

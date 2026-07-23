@@ -122,7 +122,19 @@ class OrderDetailScreen extends StatelessWidget {
     );
   }
 
-  void _reorder(BuildContext context, OrderModel order) {
+  Future<void> _reorder(BuildContext context, OrderModel order) async {
+    // Carrito de una sola tienda: si el carrito ya tiene productos de otra
+    // tienda, pedir confirmación antes de vaciarlo. No se agrega nada si el
+    // usuario cancela.
+    if (!CartService.canAddFromStore(order.storeId)) {
+      final replace = await showReplaceCartDialog(
+        context,
+        currentStoreName: CartService.cartStoreName ?? 'otra tienda',
+      );
+      if (!replace) return;
+      CartService.clear();
+    }
+    if (!context.mounted) return;
     // Reconstruye las líneas de carrito a partir de los ítems del pedido y
     // fija el contexto de tienda que usa el checkout (payment_screen lee
     // CartService.storeId/storeName/storeTone para crear la nueva orden).

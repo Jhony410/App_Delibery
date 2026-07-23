@@ -54,4 +54,27 @@ class AuthService {
 
   static Future<void> sendPasswordReset(String email) =>
       _auth.sendPasswordResetEmail(email: email);
+
+  /// Change the signed-in courier's password. Firebase requires a recent login,
+  /// so we reauthenticate with the current password first. Throws
+  /// [FirebaseAuthException] on wrong password / weak password / etc.
+  static Future<void> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    final user = _auth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null) {
+      throw FirebaseAuthException(
+        code: 'no-user',
+        message: 'No hay una sesión activa.',
+      );
+    }
+    final cred = EmailAuthProvider.credential(
+      email: email,
+      password: currentPassword,
+    );
+    await user.reauthenticateWithCredential(cred);
+    await user.updatePassword(newPassword);
+  }
 }

@@ -65,9 +65,11 @@ class CartGroup {
 }
 
 /// In-memory cart (static singleton — the app uses no state-management library).
-/// Holds items from multiple stores simultaneously. The `store*` fields below
-/// describe only the store currently being browsed; they are stamped onto each
-/// new [CartEntry] and used by the store/product screens for context labels.
+/// The cart holds products from a SINGLE store at a time (enforced by the
+/// screens via [canAddFromStore]); the per-store grouping helpers are retained
+/// so the cart UI keeps working and resolve to one group. The `store*` fields
+/// below describe only the store currently being browsed; they are stamped onto
+/// each new [CartEntry] and used by the store/product screens for context.
 class CartService {
   // ── Current browsing context (the store screen the user is looking at) ──
   static String? storeId;
@@ -109,6 +111,36 @@ class CartService {
       items.add(entry);
     }
   }
+
+  // ── Single-store enforcement ──────────────────────────────────────────────
+  // The cart may only hold products from ONE store at a time (like Rappi /
+  // PedidosYa). The grouping helpers below (`groups`, `CartGroup`) still work —
+  // with the invariant they simply resolve to a single group — so they are kept
+  // for the cart UI. The screens call [canAddFromStore] before adding and, on a
+  // conflict, prompt the user to empty the cart first.
+
+  /// The store the cart currently belongs to, or null when it is empty.
+  static String? get cartStoreId => items.isEmpty ? null : items.first.storeId;
+
+  /// The name of the store the cart currently belongs to (empty cart → null).
+  static String? get cartStoreName =>
+      items.isEmpty ? null : items.first.storeName;
+
+  /// The tone of the store the cart currently belongs to (empty cart → null).
+  static String? get cartStoreTone =>
+      items.isEmpty ? null : items.first.storeTone;
+
+  /// The delivery time stamped on the cart's items (empty cart → falls back to
+  /// the browsing context). Prefer this over the mutable browsing `deliveryTime`
+  /// when showing checkout info, so it reflects the store actually purchased
+  /// from — not whatever store was opened last.
+  static String? get cartDeliveryTime =>
+      items.isEmpty ? deliveryTime : items.first.deliveryTime;
+
+  /// Whether a product from [storeId] can be added without mixing stores.
+  /// True when the cart is empty or already belongs to that same store.
+  static bool canAddFromStore(String storeId) =>
+      items.isEmpty || cartStoreId == storeId;
 
   static void incrementEntry(CartEntry entry) => entry.qty++;
 

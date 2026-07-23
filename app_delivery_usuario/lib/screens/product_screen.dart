@@ -48,7 +48,35 @@ class _ProductScreenState extends State<ProductScreen> {
     return (base + extrasTotal + cutleryTotal) * _qty;
   }
 
-  void _addToCart(ProductModel product) {
+  Future<void> _addToCart(ProductModel product) async {
+    // Store context of the product being added (the store currently browsed).
+    // Captured before any clear() so we can re-stamp it if the cart is emptied.
+    final storeId = CartService.storeId ?? product.storeId;
+    final storeName = CartService.storeName ?? '';
+    final storeTone = CartService.storeTone ?? product.tone;
+    final deliveryTime = CartService.deliveryTime;
+    final deliveryFee = CartService.currentDeliveryFee;
+
+    // Single-store cart: if the cart already belongs to another store, ask
+    // before replacing its contents. Nothing is added unless the user confirms.
+    if (!CartService.canAddFromStore(storeId)) {
+      final replace = await showReplaceCartDialog(
+        context,
+        currentStoreName: CartService.cartStoreName ?? 'otra tienda',
+      );
+      if (!replace) return;
+      CartService.clear();
+      // clear() wipes the browsing context, so re-establish it for this store.
+      CartService.setStore(
+        id: storeId,
+        name: storeName,
+        tone: storeTone,
+        time: deliveryTime ?? '',
+        fee: deliveryFee,
+      );
+    }
+    if (!mounted) return;
+
     final sizeName = product.sizes.isNotEmpty
         ? ' (${product.sizes[_sizeIdx].name})'
         : '';
@@ -74,11 +102,11 @@ class _ProductScreenState extends State<ProductScreen> {
       tone: product.tone,
       unitPrice: _computePrice(product) / _qty,
       qty: _qty,
-      storeId: CartService.storeId ?? product.storeId,
-      storeName: CartService.storeName ?? '',
-      storeTone: CartService.storeTone ?? product.tone,
-      deliveryTime: CartService.deliveryTime,
-      deliveryFee: CartService.currentDeliveryFee,
+      storeId: storeId,
+      storeName: storeName,
+      storeTone: storeTone,
+      deliveryTime: deliveryTime,
+      deliveryFee: deliveryFee,
     ));
     // Non-blocking feedback — keep the user on the screen so they can keep
     // browsing and adding more products. Navigation to the cart is explicit

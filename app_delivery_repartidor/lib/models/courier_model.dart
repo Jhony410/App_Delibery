@@ -16,6 +16,11 @@ class CourierModel {
   final double acceptanceRate;
   final String status; // pending_review | active | suspended
   final bool online;
+  // Online-time tracking. `onlineSince` is set (server timestamp) the moment the
+  // courier toggles online and cleared on offline; `onlineByDay` accumulates the
+  // seconds spent online per calendar day, keyed 'YYYY-MM-DD'.
+  final DateTime? onlineSince;
+  final Map<String, int> onlineByDay;
 
   const CourierModel({
     required this.uid,
@@ -33,7 +38,26 @@ class CourierModel {
     this.acceptanceRate = 1.0,
     this.status = 'pending_review',
     this.online = false,
+    this.onlineSince,
+    this.onlineByDay = const {},
   });
+
+  /// Day key used to bucket online-time, e.g. '2026-07-22'.
+  static String dayKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  /// Total seconds online today, including the live open session if currently
+  /// online. Pass [now] so the caller controls the tick for live updates.
+  int onlineSecondsToday(DateTime now) {
+    var secs = onlineByDay[dayKey(now)] ?? 0;
+    if (online && onlineSince != null) {
+      final live = now.difference(onlineSince!).inSeconds;
+      if (live > 0) secs += live;
+    }
+    return secs;
+  }
 
   String get initials {
     final parts = name.trim().split(RegExp(r'\s+'));
@@ -62,6 +86,11 @@ class CourierModel {
         acceptanceRate: (m['acceptanceRate'] as num?)?.toDouble() ?? 1.0,
         status: m['status'] ?? 'pending_review',
         online: m['online'] ?? false,
+        onlineSince: (m['onlineSince'] as Timestamp?)?.toDate(),
+        onlineByDay: (m['onlineByDay'] as Map?)?.map(
+              (k, v) => MapEntry(k.toString(), (v as num).toInt()),
+            ) ??
+            const {},
       );
 
   Map<String, dynamic> toMap() => {

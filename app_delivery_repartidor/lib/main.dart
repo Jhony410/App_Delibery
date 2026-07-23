@@ -12,6 +12,11 @@ import 'screens/main_shell.dart';
 import 'screens/new_order_screen.dart';
 import 'screens/order_detail_screen.dart';
 import 'screens/pickup_screen.dart';
+import 'screens/profile/bank_account_screen.dart';
+import 'screens/profile/help_support_screen.dart';
+import 'screens/profile/personal_data_screen.dart';
+import 'screens/profile/security_screen.dart';
+import 'screens/profile/vehicle_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/review_screen.dart';
 import 'screens/route_to_customer_screen.dart';
@@ -130,6 +135,31 @@ class RepartidorApp extends StatelessWidget {
         return MaterialPageRoute(
           settings: settings,
           builder: (_) => ChatScreen(order: order),
+        );
+      case '/personal-data':
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const PersonalDataScreen(),
+        );
+      case '/vehicle':
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const VehicleScreen(),
+        );
+      case '/bank-account':
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const BankAccountScreen(),
+        );
+      case '/help':
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const HelpSupportScreen(),
+        );
+      case '/security':
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const SecurityScreen(),
         );
     }
     return null;

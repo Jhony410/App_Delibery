@@ -38,6 +38,10 @@ class OrderModel {
   final String storeId;
   final String storeName;
   final String storeTone;
+  // Pickup location text for the courier app. Written at order creation from
+  // the store's StoreModel.address so the courier sees a real address instead
+  // of "Dirección no registrada". The courier app reads `storeAddress`.
+  final String? storeAddress;
   final List<OrderItem> items;
   final double subtotal;
   final double deliveryFee;
@@ -66,6 +70,7 @@ class OrderModel {
     required this.storeId,
     required this.storeName,
     required this.storeTone,
+    this.storeAddress,
     required this.items,
     required this.subtotal,
     required this.deliveryFee,
@@ -87,6 +92,7 @@ class OrderModel {
         storeId: m['storeId'],
         storeName: m['storeName'],
         storeTone: m['storeTone'] ?? 'warm',
+        storeAddress: m['storeAddress'] as String?,
         items: (m['items'] as List)
             .map((i) => OrderItem.fromMap(Map<String, dynamic>.from(i)))
             .toList(),
@@ -109,6 +115,8 @@ class OrderModel {
         'storeId': storeId,
         'storeName': storeName,
         'storeTone': storeTone,
+        if (storeAddress != null && storeAddress!.isNotEmpty)
+          'storeAddress': storeAddress,
         'items': items.map((i) => i.toMap()).toList(),
         'subtotal': subtotal,
         'deliveryFee': deliveryFee,

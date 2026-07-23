@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/order_model.dart';
+import '../services/external_maps.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import '../widgets/courier_map.dart';
 
 class RouteToStoreScreen extends StatelessWidget {
   final OrderModel order;
@@ -9,23 +11,36 @@ class RouteToStoreScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dist = order.distanceKm ?? 1.2;
-    final eta = (dist * 3.5).round();
+    // OrderModel carries no store coordinates today, so we can only show the
+    // courier's live position. When storeLat/storeLng are added upstream, pass
+    // them here as `destination` and the marker + camera framing appear for free.
     return Scaffold(
       backgroundColor: CourierColors.bg,
       body: Stack(
         children: [
-          const Positioned.fill(child: DarkMapBackground(withRoute: true)),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
-              child: _InstructionCard(
-                icon: Icons.navigation_rounded,
-                iconColor: Colors.white,
-                iconBg: CourierColors.primary,
-                hint: 'EN 250 m',
-                instruction: 'Gira a la derecha en Av. Petit Thouars',
-                onBack: () => Navigator.of(context).maybePop(),
+          Positioned.fill(
+            child: CourierMap(
+              destinationLabel: order.storeName,
+              loadingLabel: 'Buscando ruta al comercio',
+            ),
+          ),
+          // Top-anchored, content-height header floating over the map. Using
+          // Positioned(top/left/right) with no bottom guarantees it only takes
+          // the height of its content — it can never stretch to fill the Stack.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+                child: _DestinationHeader(
+                  title: 'RECOGER EN',
+                  name: order.storeName,
+                  address: order.storeAddress ?? 'Dirección no registrada',
+                  iconBg: CourierColors.primary,
+                  onBack: () => Navigator.of(context).maybePop(),
+                ),
               ),
             ),
           ),
@@ -34,9 +49,8 @@ class RouteToStoreScreen extends StatelessWidget {
             child: _BottomSheet(
               title: 'RECOGER EN',
               storeName: order.storeName,
-              address: order.storeAddress ?? 'Av. Petit Thouars 2150',
-              distance: '${dist.toStringAsFixed(1)} km',
-              eta: '$eta min',
+              address: order.storeAddress ?? 'Dirección no registrada',
+              mapsQuery: order.storeAddress ?? order.storeName,
               cta: 'Llegué al comercio',
               onPressed: () => Navigator.of(context).pushReplacementNamed(
                 '/pickup',
@@ -50,20 +64,18 @@ class RouteToStoreScreen extends StatelessWidget {
   }
 }
 
-class _InstructionCard extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
+class _DestinationHeader extends StatelessWidget {
+  final String title;
+  final String name;
+  final String address;
   final Color iconBg;
-  final String hint;
-  final String instruction;
   final VoidCallback onBack;
 
-  const _InstructionCard({
-    required this.icon,
-    required this.iconColor,
+  const _DestinationHeader({
+    required this.title,
+    required this.name,
+    required this.address,
     required this.iconBg,
-    required this.hint,
-    required this.instruction,
     required this.onBack,
   });
 
@@ -88,7 +100,7 @@ class _InstructionCard extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: CourierColors.surface,
               borderRadius: BorderRadius.circular(16),
@@ -104,7 +116,8 @@ class _InstructionCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.center,
-                  child: Icon(icon, size: 24, color: iconColor),
+                  child: const Icon(Icons.storefront_rounded,
+                      size: 22, color: Colors.white),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -112,7 +125,7 @@ class _InstructionCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        hint,
+                        title,
                         style: const TextStyle(
                           fontSize: 11,
                           color: CourierColors.textMuted,
@@ -122,7 +135,9 @@ class _InstructionCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        instruction,
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w800,
@@ -146,8 +161,7 @@ class _BottomSheet extends StatelessWidget {
   final String title;
   final String storeName;
   final String address;
-  final String distance;
-  final String eta;
+  final String mapsQuery;
   final String cta;
   final VoidCallback onPressed;
 
@@ -155,11 +169,21 @@ class _BottomSheet extends StatelessWidget {
     required this.title,
     required this.storeName,
     required this.address,
-    required this.distance,
-    required this.eta,
+    required this.mapsQuery,
     required this.cta,
     required this.onPressed,
   });
+
+  Future<void> _openMaps(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await ExternalMaps.open(query: mapsQuery);
+    if (!ok) {
+      messenger.showSnackBar(const SnackBar(
+        content: Text('No se pudo abrir Google Maps.'),
+        backgroundColor: CourierColors.danger,
+      ));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -187,67 +211,52 @@ class _BottomSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 14),
-            Row(
+            // Real destination info only — no fabricated distance/ETA. There are
+            // no destination coordinates on OrderModel yet, so straight-line
+            // distance (Geolocator.distanceBetween) cannot be computed; we omit
+            // it rather than show an invented value.
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: CourierColors.textMuted,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        storeName,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: CourierColors.text,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        address,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: CourierColors.textMuted,
-                        ),
-                      ),
-                    ],
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: CourierColors.textMuted,
+                    letterSpacing: 0.6,
                   ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      eta,
-                      style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: CourierColors.primary,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                    Text(
-                      distance,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: CourierColors.textMuted,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 2),
+                Text(
+                  storeName,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: CourierColors.text,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  address,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: CourierColors.textMuted,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
+            // Real turn-by-turn navigation is delegated to the phone's Google
+            // Maps (no in-app Directions API). Opens a search for the address.
+            CButton(
+              label: 'Abrir en Google Maps',
+              icon: Icons.map_outlined,
+              size: CButtonSize.lg,
+              variant: CButtonVariant.ghost,
+              onPressed: () => _openMaps(context),
+            ),
+            const SizedBox(height: 10),
             CButton(
               label: cta,
               icon: Icons.check_circle_outline,
