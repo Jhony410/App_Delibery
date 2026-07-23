@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../theme.dart';
 import '../models/order_model.dart';
 import '../services/db_service.dart';
@@ -75,14 +78,22 @@ class _TrackingScreenState extends State<TrackingScreen> {
           backgroundColor: Colors.white,
           body: Column(
             children: [
-              // ── Mapa ───────────────────────────────────────────
+              // ── Mapa real ──────────────────────────────────────
               SizedBox(
                 height: 340,
                 child: Stack(
                   children: [
-                    CustomPaint(
-                      size: const Size(double.infinity, 340),
-                      painter: _TrackingMapPainter(active: active),
+                    Positioned.fill(
+                      child: order == null
+                          ? Container(color: AppColors.bg)
+                          : _LiveTrackingMap(
+                              order: order,
+                              // Subscribe to the courier's live position ONLY
+                              // while the order is active — cancelled the instant
+                              // it is delivered/cancelled (StreamBuilder is not
+                              // built then) and on dispose.
+                              trackCourier: !isDelivered && !isCancelled,
+                            ),
                     ),
                     Positioned(
                       top: MediaQuery.of(context).padding.top + 10,
@@ -90,64 +101,6 @@ class _TrackingScreenState extends State<TrackingScreen> {
                       child: _CircleBtn(
                         onTap: () => Navigator.pop(context),
                         child: const Icon(Icons.chevron_left, size: 22),
-                      ),
-                    ),
-                    // Pin tienda
-                    const Positioned(
-                      left: 48,
-                      top: 60,
-                      child: _MapPin(isStore: true,
-                          child: Icon(Icons.restaurant, size: 17, color: AppColors.primary)),
-                    ),
-                    // Pin casa
-                    const Positioned(
-                      left: 248,
-                      top: 268,
-                      child: _MapPin(isStore: false,
-                          child: Icon(Icons.home, size: 17, color: Colors.white)),
-                    ),
-                    // Repartidor
-                    Positioned(
-                      left: _driverLeft(active),
-                      top: _driverTop(active),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Container(
-                            width: 60,
-                            height: 60,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: AppColors.primary.withValues(alpha: 0.18),
-                            ),
-                          ),
-                          Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isDelivered
-                                  ? AppColors.secondary
-                                  : AppColors.primary,
-                              border: Border.all(color: Colors.white, width: 3),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: (isDelivered
-                                          ? AppColors.secondary
-                                          : AppColors.primary)
-                                      .withValues(alpha: 0.45),
-                                  blurRadius: 14,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Icon(
-                              isDelivered ? Icons.check : Icons.motorcycle,
-                              size: 20,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                   ],
@@ -541,23 +494,207 @@ class _TrackingScreenState extends State<TrackingScreen> {
         'cancelado' => AppColors.danger,
         _ => AppColors.primary,
       };
+}
 
-  // Posición animada del repartidor según el paso
-  double _driverLeft(int step) => switch (step) {
-        0 => 62.0,
-        1 => 100.0,
-        2 => 150.0,
-        3 => 245.0,
-        _ => 62.0,
-      };
+/// Real Google Map for order tracking. Shows the store and delivery markers
+/// (when the order carries coordinates) plus the courier's live marker, streamed
+/// from `courierLocations/{courierId}`.
+///
+/// Lifecycle discipline (critical for read costs): the courier stream is only
+/// subscribed while [trackCourier] is true (i.e. the order is active). When the
+/// order becomes delivered/cancelled the parent rebuilds with trackCourier=false
+/// so the inner StreamBuilder is not built — its listener is torn down at once —
+/// and it is likewise disposed when the tracking screen is popped.
+class _LiveTrackingMap extends StatefulWidget {
+  final OrderModel order;
+  final bool trackCourier;
+  const _LiveTrackingMap({required this.order, required this.trackCourier});
 
-  double _driverTop(int step) => switch (step) {
-        0 => 74.0,
-        1 => 120.0,
-        2 => 168.0,
-        3 => 270.0,
-        _ => 74.0,
-      };
+  @override
+  State<_LiveTrackingMap> createState() => _LiveTrackingMapState();
+}
+
+class _LiveTrackingMapState extends State<_LiveTrackingMap> {
+  GoogleMapController? _controller;
+  // Signature of the marker set the camera was last framed to, so we only refit
+  // when the composition changes (e.g. the courier marker first appears) rather
+  // than on every position update.
+  String _fitSignature = '';
+
+  static const _puno = LatLng(-15.8402, -70.0219);
+
+  LatLng? get _store => (widget.order.storeLat != null &&
+          widget.order.storeLng != null)
+      ? LatLng(widget.order.storeLat!, widget.order.storeLng!)
+      : null;
+
+  LatLng? get _delivery => (widget.order.deliveryLat != null &&
+          widget.order.deliveryLng != null)
+      ? LatLng(widget.order.deliveryLat!, widget.order.deliveryLng!)
+      : null;
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final courierId = widget.order.courierId ?? widget.order.assignedCourierId;
+    if (widget.trackCourier && courierId != null) {
+      return StreamBuilder<CourierLocation?>(
+        stream: DbService.streamCourierLocation(courierId),
+        builder: (context, snap) => _buildMap(snap.data),
+      );
+    }
+    return _buildMap(null);
+  }
+
+  Widget _buildMap(CourierLocation? courierLoc) {
+    final store = _store;
+    final delivery = _delivery;
+    final courier =
+        courierLoc != null ? LatLng(courierLoc.lat, courierLoc.lng) : null;
+
+    final markers = <Marker>{
+      if (store != null)
+        Marker(
+          markerId: const MarkerId('store'),
+          position: store,
+          infoWindow: InfoWindow(title: widget.order.storeName),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueOrange),
+        ),
+      if (delivery != null)
+        Marker(
+          markerId: const MarkerId('delivery'),
+          position: delivery,
+          infoWindow: const InfoWindow(title: 'Tu entrega'),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueGreen),
+        ),
+      if (courier != null)
+        Marker(
+          markerId: const MarkerId('courier'),
+          position: courier,
+          infoWindow: const InfoWindow(title: 'Tu repartidor'),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueAzure),
+        ),
+    };
+
+    // Frame the camera when the set of present markers changes.
+    final points = <LatLng>[
+      ?store,
+      ?delivery,
+      ?courier,
+    ];
+    final signature = [
+      if (store != null) 's',
+      if (delivery != null) 'd',
+      if (courier != null) 'c',
+    ].join();
+    if (signature != _fitSignature && points.isNotEmpty) {
+      _fitSignature = signature;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fit(points));
+    }
+
+    // Tell the customer the courier isn't sharing yet — whether none is
+    // assigned or one is assigned but hasn't published a position. Only while
+    // the order is active (trackCourier) and no real courier marker exists. We
+    // never invent a fake marker.
+    final awaitingCourier = widget.trackCourier && courier == null;
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: courier ?? delivery ?? store ?? _puno,
+              zoom: 14,
+            ),
+            markers: markers,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
+            myLocationButtonEnabled: false,
+            myLocationEnabled: false,
+            onMapCreated: (c) {
+              _controller = c;
+              if (points.isNotEmpty) {
+                _fitSignature = signature;
+                _fit(points);
+              }
+            },
+          ),
+        ),
+        // Honest empty state: no marker is invented for the courier — we say so.
+        if (awaitingCourier)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 14,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.95),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: const Row(
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppColors.primary),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'El repartidor aún no comparte su ubicación.',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.appText),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _fit(List<LatLng> points) async {
+    final controller = _controller;
+    if (controller == null || points.isEmpty) return;
+    if (points.length == 1) {
+      await controller.animateCamera(
+          CameraUpdate.newLatLngZoom(points.first, 15));
+      return;
+    }
+    var minLat = points.first.latitude, maxLat = points.first.latitude;
+    var minLng = points.first.longitude, maxLng = points.first.longitude;
+    for (final p in points) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    final bounds = LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
+    await controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 64));
+  }
 }
 
 class _SummaryRow extends StatelessWidget {
@@ -603,26 +740,6 @@ class _CircleBtn extends StatelessWidget {
           ),
           child: child,
         ),
-      );
-}
-
-class _MapPin extends StatelessWidget {
-  final bool isStore;
-  final Widget child;
-  const _MapPin({required this.isStore, required this.child});
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: isStore ? Colors.white : AppColors.appText,
-          border: isStore
-              ? Border.all(color: AppColors.primary, width: 2.5)
-              : null,
-        ),
-        child: child,
       );
 }
 
@@ -797,63 +914,4 @@ class _ActionBtn extends StatelessWidget {
         ),
         child: child,
       );
-}
-
-class _TrackingMapPainter extends CustomPainter {
-  final int active;
-  const _TrackingMapPainter({required this.active});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final sx = size.width / 375;
-    final sy = size.height / 340;
-    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFFDDE7EC));
-    final block = Paint()..color = const Color(0xFFE8EEF2);
-    void rect(double x, double y, double w, double h) => canvas.drawRect(
-        Rect.fromLTWH(x * sx, y * sy, w * sx, h * sy), block);
-    rect(0, 0, 160, 100);
-    rect(180, 0, 195, 100);
-    rect(0, 125, 90, 110);
-    rect(110, 125, 180, 110);
-    rect(310, 125, 65, 110);
-    rect(0, 260, 160, 80);
-    rect(180, 260, 195, 80);
-    final road = Paint()..color = Colors.white;
-    void rroad(double x, double y, double w, double h) => canvas.drawRect(
-        Rect.fromLTWH(x * sx, y * sy, w * sx, h * sy), road);
-    rroad(0, 105, 375, 14);
-    rroad(0, 242, 375, 14);
-    rroad(160, 0, 18, 340);
-    rroad(90, 125, 16, 110);
-
-    final routePath = Path()
-      ..moveTo(65 * sx, 77 * sy)
-      ..quadraticBezierTo(110 * sx, 95 * sy, 168 * sx, 158 * sy)
-      ..quadraticBezierTo(226 * sx, 228 * sy, 260 * sx, 285 * sy);
-
-    canvas.drawPath(
-        routePath,
-        Paint()
-          ..color = AppColors.primary.withValues(alpha: 0.35)
-          ..strokeWidth = 5 * sx
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round);
-
-    // Parte recorrida
-    if (active > 0) {
-      final metrics = routePath.computeMetrics().first;
-      final progress = (active / 3).clamp(0.0, 1.0);
-      final partial = metrics.extractPath(0, metrics.length * progress);
-      canvas.drawPath(
-          partial,
-          Paint()
-            ..color = AppColors.primary
-            ..strokeWidth = 5 * sx
-            ..style = PaintingStyle.stroke
-            ..strokeCap = StrokeCap.round);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_TrackingMapPainter old) => old.active != active;
 }

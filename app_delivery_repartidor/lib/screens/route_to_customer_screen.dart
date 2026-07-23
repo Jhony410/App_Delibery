@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../models/order_model.dart';
 import '../services/external_maps.dart';
 import '../theme.dart';
@@ -9,16 +10,23 @@ class RouteToCustomerScreen extends StatelessWidget {
   final OrderModel order;
   const RouteToCustomerScreen({super.key, required this.order});
 
+  /// Delivery coordinates propagated from the customer app, or null when the
+  /// chosen address had no coordinates saved.
+  LatLng? get _deliveryDest =>
+      (order.deliveryLat != null && order.deliveryLng != null)
+          ? LatLng(order.deliveryLat!, order.deliveryLng!)
+          : null;
+
   @override
   Widget build(BuildContext context) {
-    // No customer coordinates on OrderModel yet — show only the courier's live
-    // position. Pass `destination` here once lat/lng propagate from the client.
+    final dest = _deliveryDest;
     return Scaffold(
       backgroundColor: CourierColors.bg,
       body: Stack(
         children: [
           Positioned.fill(
             child: CourierMap(
+              destination: dest,
               destinationLabel: order.customerName ?? 'Cliente',
               loadingLabel: 'Buscando ruta al cliente',
             ),
@@ -203,6 +211,14 @@ class RouteToCustomerScreen extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (dest == null) ...[
+                      const SizedBox(height: 12),
+                      const CoordsMissingNotice(
+                        text:
+                            'Esta entrega no tiene ubicación exacta en el mapa. '
+                            'Guíate por la dirección del cliente.',
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     // Real turn-by-turn is delegated to the phone's Google Maps
                     // (no in-app Directions API). Opens a search for the address.
@@ -240,7 +256,12 @@ class RouteToCustomerScreen extends StatelessWidget {
     final query = order.address.trim().isNotEmpty
         ? order.address
         : (order.customerName ?? '');
-    final ok = await ExternalMaps.open(query: query);
+    // Prefer exact coordinates when the delivery address has them.
+    final ok = await ExternalMaps.open(
+      lat: order.deliveryLat,
+      lng: order.deliveryLng,
+      query: query,
+    );
     if (!ok) {
       messenger.showSnackBar(const SnackBar(
         content: Text('No se pudo abrir Google Maps.'),

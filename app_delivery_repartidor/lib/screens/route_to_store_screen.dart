@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../models/order_model.dart';
 import '../services/external_maps.dart';
 import '../theme.dart';
@@ -9,17 +10,22 @@ class RouteToStoreScreen extends StatelessWidget {
   final OrderModel order;
   const RouteToStoreScreen({super.key, required this.order});
 
+  /// Store coordinates propagated from the customer app, or null when the store
+  /// had no location set (older orders / stores without coords).
+  LatLng? get _storeDest => (order.storeLat != null && order.storeLng != null)
+      ? LatLng(order.storeLat!, order.storeLng!)
+      : null;
+
   @override
   Widget build(BuildContext context) {
-    // OrderModel carries no store coordinates today, so we can only show the
-    // courier's live position. When storeLat/storeLng are added upstream, pass
-    // them here as `destination` and the marker + camera framing appear for free.
+    final dest = _storeDest;
     return Scaffold(
       backgroundColor: CourierColors.bg,
       body: Stack(
         children: [
           Positioned.fill(
             child: CourierMap(
+              destination: dest,
               destinationLabel: order.storeName,
               loadingLabel: 'Buscando ruta al comercio',
             ),
@@ -51,6 +57,8 @@ class RouteToStoreScreen extends StatelessWidget {
               storeName: order.storeName,
               address: order.storeAddress ?? 'Dirección no registrada',
               mapsQuery: order.storeAddress ?? order.storeName,
+              destLat: order.storeLat,
+              destLng: order.storeLng,
               cta: 'Llegué al comercio',
               onPressed: () => Navigator.of(context).pushReplacementNamed(
                 '/pickup',
@@ -162,6 +170,8 @@ class _BottomSheet extends StatelessWidget {
   final String storeName;
   final String address;
   final String mapsQuery;
+  final double? destLat;
+  final double? destLng;
   final String cta;
   final VoidCallback onPressed;
 
@@ -170,13 +180,23 @@ class _BottomSheet extends StatelessWidget {
     required this.storeName,
     required this.address,
     required this.mapsQuery,
+    this.destLat,
+    this.destLng,
     required this.cta,
     required this.onPressed,
   });
 
+  bool get _hasCoords => destLat != null && destLng != null;
+
   Future<void> _openMaps(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
-    final ok = await ExternalMaps.open(query: mapsQuery);
+    // Prefer exact coordinates for external navigation; fall back to a text
+    // query (address) when the store has no coordinates.
+    final ok = await ExternalMaps.open(
+      lat: destLat,
+      lng: destLng,
+      query: mapsQuery,
+    );
     if (!ok) {
       messenger.showSnackBar(const SnackBar(
         content: Text('No se pudo abrir Google Maps.'),
@@ -246,6 +266,13 @@ class _BottomSheet extends StatelessWidget {
                 ),
               ],
             ),
+            if (!_hasCoords) ...[
+              const SizedBox(height: 12),
+              const CoordsMissingNotice(
+                text: 'Este comercio no tiene ubicación exacta en el mapa. '
+                    'Guíate por la dirección de arriba.',
+              ),
+            ],
             const SizedBox(height: 12),
             // Real turn-by-turn navigation is delegated to the phone's Google
             // Maps (no in-app Directions API). Opens a search for the address.

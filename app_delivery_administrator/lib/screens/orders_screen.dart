@@ -61,6 +61,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
       child: StreamBuilder<List<OrderModel>>(
         stream: OrderService.streamAll(limit: 200),
         builder: (context, snap) {
+          if (snap.hasError) {
+            debugPrint('OrdersScreen stream error: ${snap.error}');
+            return AdminErrorState(message: '${snap.error}');
+          }
           final all = snap.data ?? const <OrderModel>[];
           final visible = all
               .where(_matchFilter)

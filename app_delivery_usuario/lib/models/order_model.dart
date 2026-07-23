@@ -42,6 +42,18 @@ class OrderModel {
   // the store's StoreModel.address so the courier sees a real address instead
   // of "Dirección no registrada". The courier app reads `storeAddress`.
   final String? storeAddress;
+  // Store contact phone, written at order creation from the store doc's `phone`
+  // field (set by the admin). Null when the store has no phone on record.
+  final String? storePhone;
+  // Geographic coordinates propagated at order creation so every app speaks the
+  // same language. All nullable: older orders (and stores/addresses without
+  // coordinates) simply carry null and every screen must degrade gracefully.
+  // storeLat/storeLng come from the store's StoreModel; deliveryLat/deliveryLng
+  // from the delivery AddressModel the customer selected.
+  final double? storeLat;
+  final double? storeLng;
+  final double? deliveryLat;
+  final double? deliveryLng;
   final List<OrderItem> items;
   final double subtotal;
   final double deliveryFee;
@@ -71,6 +83,11 @@ class OrderModel {
     required this.storeName,
     required this.storeTone,
     this.storeAddress,
+    this.storePhone,
+    this.storeLat,
+    this.storeLng,
+    this.deliveryLat,
+    this.deliveryLng,
     required this.items,
     required this.subtotal,
     required this.deliveryFee,
@@ -93,6 +110,11 @@ class OrderModel {
         storeName: m['storeName'],
         storeTone: m['storeTone'] ?? 'warm',
         storeAddress: m['storeAddress'] as String?,
+        storePhone: m['storePhone'] as String?,
+        storeLat: (m['storeLat'] as num?)?.toDouble(),
+        storeLng: (m['storeLng'] as num?)?.toDouble(),
+        deliveryLat: (m['deliveryLat'] as num?)?.toDouble(),
+        deliveryLng: (m['deliveryLng'] as num?)?.toDouble(),
         items: (m['items'] as List)
             .map((i) => OrderItem.fromMap(Map<String, dynamic>.from(i)))
             .toList(),
@@ -117,6 +139,15 @@ class OrderModel {
         'storeTone': storeTone,
         if (storeAddress != null && storeAddress!.isNotEmpty)
           'storeAddress': storeAddress,
+        if (storePhone != null && storePhone!.isNotEmpty)
+          'storePhone': storePhone,
+        // Coordinates: written only when known. A store/address without
+        // coordinates yields null here, and the order is still created — the
+        // purchase is never blocked.
+        if (storeLat != null) 'storeLat': storeLat,
+        if (storeLng != null) 'storeLng': storeLng,
+        if (deliveryLat != null) 'deliveryLat': deliveryLat,
+        if (deliveryLng != null) 'deliveryLng': deliveryLng,
         'items': items.map((i) => i.toMap()).toList(),
         'subtotal': subtotal,
         'deliveryFee': deliveryFee,

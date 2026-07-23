@@ -45,6 +45,9 @@ class _CourierMapState extends State<CourierMap> {
   String? _error;
   bool _hasPermission = false;
   bool _loading = true;
+  // Camera is framed to both markers exactly once (on open). After that the
+  // courier is free to pan/zoom without the map yanking back on every GPS tick.
+  bool _framed = false;
 
   @override
   void initState() {
@@ -73,7 +76,7 @@ class _CourierMapState extends State<CourierMap> {
         _me = LatLng(pos.latitude, pos.longitude);
         _loading = false;
       });
-      _moveCamera(_me!);
+      _frameOnce();
       _listen();
     } else {
       setState(() {
@@ -88,13 +91,57 @@ class _CourierMapState extends State<CourierMap> {
     _sub = LocationService.stream().listen((pos) {
       if (!mounted) return;
       setState(() => _me = LatLng(pos.latitude, pos.longitude));
+      // Frame lazily in case the map or first fix arrived out of order; only
+      // fires while still un-framed, so it won't fight the courier panning.
+      _frameOnce();
     }, onError: (_) {});
   }
 
-  Future<void> _moveCamera(LatLng target) async {
-    await _controller?.animateCamera(
-      CameraUpdate.newLatLngZoom(target, 15),
-    );
+  /// Straight-line distance (metres) between the courier and the destination,
+  /// or null when either point is unknown. Computed locally — no Directions API.
+  double? get _distanceMeters {
+    final me = _me;
+    final dest = widget.destination;
+    if (me == null || dest == null) return null;
+    return Geolocator.distanceBetween(
+        me.latitude, me.longitude, dest.latitude, dest.longitude);
+  }
+
+  String _formatDistance(double meters) {
+    if (meters < 1000) return '${meters.round()} m en línea recta';
+    return '${(meters / 1000).toStringAsFixed(1)} km en línea recta';
+  }
+
+  /// Frames the camera so both the courier and the destination are visible —
+  /// exactly once, when both are first known (or just the courier if there is
+  /// no destination). After that the courier controls the camera.
+  Future<void> _frameOnce() async {
+    if (_framed) return;
+    final controller = _controller;
+    if (controller == null) return;
+    final me = _me;
+    final dest = widget.destination;
+    if (me != null && dest != null) {
+      _framed = true;
+      final bounds = LatLngBounds(
+        southwest: LatLng(
+          me.latitude < dest.latitude ? me.latitude : dest.latitude,
+          me.longitude < dest.longitude ? me.longitude : dest.longitude,
+        ),
+        northeast: LatLng(
+          me.latitude > dest.latitude ? me.latitude : dest.latitude,
+          me.longitude > dest.longitude ? me.longitude : dest.longitude,
+        ),
+      );
+      await controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 72));
+    } else if (me != null) {
+      _framed = true;
+      await controller.animateCamera(CameraUpdate.newLatLngZoom(me, 15));
+    } else if (dest != null) {
+      // No courier fix yet — center on the destination for now; when the fix
+      // arrives _framed is still false so we re-frame to both.
+      await controller.animateCamera(CameraUpdate.newLatLngZoom(dest, 15));
+    }
   }
 
   @override
@@ -123,11 +170,53 @@ class _CourierMapState extends State<CourierMap> {
             markers: markers,
             onMapCreated: (c) {
               _controller = c;
-              final focus = _me ?? widget.destination;
-              if (focus != null) _moveCamera(focus);
+              _frameOnce();
             },
           ),
         ),
+        // Straight-line distance chip (top-center, clearing the destination
+        // header). Shown only when both the courier and the destination are
+        // known. No Directions API — this is Geolocator.distanceBetween.
+        if (_distanceMeters != null)
+          Positioned(
+            top: 96,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: CourierColors.surface.withValues(alpha: 0.94),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: CourierColors.border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.25),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.straighten_rounded,
+                        size: 15, color: CourierColors.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      _formatDistance(_distanceMeters!),
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: CourierColors.text,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         // Loading + error overlays live INSIDE the map layer (this Positioned.
         // fill is the bottom child of the route screen's Stack), so they always
         // render below the top destination card and the bottom action panel.
@@ -148,6 +237,44 @@ class _CourierMapState extends State<CourierMap> {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Inline warning shown on a route screen when the order has no destination
+/// coordinates, so the courier knows to rely on the text address instead. Kept
+/// here (next to [CourierMap]) so both route screens reuse it without dupes.
+class CoordsMissingNotice extends StatelessWidget {
+  final String text;
+  const CoordsMissingNotice({super.key, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: CourierColors.warning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: CourierColors.warning.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.location_off_rounded,
+              size: 18, color: CourierColors.warning),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: CourierColors.text,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

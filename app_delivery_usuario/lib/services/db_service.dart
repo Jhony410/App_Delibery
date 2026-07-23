@@ -124,6 +124,19 @@ class DbService {
       .snapshots()
       .map((d) => d.exists ? CourierInfo.fromMap(d.id, d.data()!) : null);
 
+  // ── Courier live location ─────────────────────────────────
+  /// Live position of a courier from `courierLocations/{courierId}` (written by
+  /// the courier app while it has an active delivery). Returns null when the
+  /// courier has never published or the doc carries no coordinates. The tracking
+  /// screen must subscribe ONLY while its order is active and cancel otherwise.
+  static Stream<CourierLocation?> streamCourierLocation(String courierId) => _db
+      .collection('courierLocations')
+      .doc(courierId)
+      .snapshots()
+      .map((d) => (d.exists && d.data()?['lat'] != null)
+          ? CourierLocation.fromMap(d.data()!)
+          : null);
+
   // ── Users ─────────────────────────────────────────────────
   static Future<UserModel?> getUser(String uid) async {
     final doc = await _db.collection('users').doc(uid).get();
@@ -268,6 +281,31 @@ class DbService {
           .collection('addresses')
           .doc(addressId)
           .delete();
+}
+
+/// The courier's last published position, read from `courierLocations/{uid}`.
+class CourierLocation {
+  final double lat;
+  final double lng;
+  final double? heading;
+  final DateTime? updatedAt;
+  final String? activeOrderId;
+
+  const CourierLocation({
+    required this.lat,
+    required this.lng,
+    this.heading,
+    this.updatedAt,
+    this.activeOrderId,
+  });
+
+  factory CourierLocation.fromMap(Map<String, dynamic> m) => CourierLocation(
+        lat: (m['lat'] as num).toDouble(),
+        lng: (m['lng'] as num).toDouble(),
+        heading: (m['heading'] as num?)?.toDouble(),
+        updatedAt: (m['updatedAt'] as Timestamp?)?.toDate(),
+        activeOrderId: m['activeOrderId'] as String?,
+      );
 }
 
 /// Read-only projection of a `couriers/{uid}` doc — only the fields the customer

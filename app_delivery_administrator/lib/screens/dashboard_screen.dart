@@ -44,6 +44,10 @@ class _DashboardBody extends StatelessWidget {
     return StreamBuilder<List<OrderModel>>(
       stream: OrderService.streamAll(limit: 50),
       builder: (context, snap) {
+        if (snap.hasError) {
+          debugPrint('DashboardScreen stream error: ${snap.error}');
+          return AdminErrorState(message: '${snap.error}');
+        }
         final orders = snap.data ?? const <OrderModel>[];
         final today = _ordersToday(orders);
         final salesToday = today.fold<double>(0, (a, b) => a + b.total);

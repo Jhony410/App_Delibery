@@ -22,6 +22,9 @@ class _CartScreenState extends State<CartScreen> {
     if (chosen is AddressModel) {
       CartService.selectedAddress = chosen.street;
       CartService.selectedAddressRef = chosen.reference;
+      // Propagate the address coordinates so the order can carry deliveryLat/Lng.
+      CartService.selectedAddressLat = chosen.latitude;
+      CartService.selectedAddressLng = chosen.longitude;
       Navigator.pushNamed(context, '/summary');
     }
   }

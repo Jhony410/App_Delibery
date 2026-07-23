@@ -514,3 +514,63 @@ class AdminPillToggle extends StatelessWidget {
     );
   }
 }
+
+/// ─── Error state ───────────────────────────────────────────────
+/// Visible error card shown when a StreamBuilder/FutureBuilder reports
+/// `snapshot.hasError`. A Firestore failure (e.g. permission-denied) must
+/// surface as this — never as an empty list, which hides the real cause.
+class AdminErrorState extends StatelessWidget {
+  final String message;
+  final String? title;
+  const AdminErrorState({super.key, required this.message, this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return AdminCard(
+      background: AdminColors.redTint,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AdminColors.surface,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            alignment: Alignment.center,
+            child: const Icon(Icons.error_outline,
+                size: 20, color: AdminColors.red),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title ?? 'No se pudieron cargar los datos',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AdminColors.red),
+                ),
+                const SizedBox(height: 4),
+                SelectableText(
+                  message,
+                  style: const TextStyle(
+                      fontSize: 12.5, color: AdminColors.text),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Abre la consola del navegador (F12) para ver el detalle completo.',
+                  style: TextStyle(
+                      fontSize: 11, color: AdminColors.textMuted),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

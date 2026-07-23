@@ -2,15 +2,19 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 
 import '../models/order_model.dart';
+import '../models/store_model.dart';
 import '../routes.dart';
 import '../services/courier_service.dart';
 import '../services/order_service.dart';
+import '../services/store_service.dart';
 import '../theme.dart';
 import '../widgets/admin_shell.dart';
 import '../widgets/admin_widgets.dart';
+import '../widgets/map_location_picker.dart';
 
 class OrderDetailScreen extends StatelessWidget {
   final OrderModel? initial;
@@ -119,7 +123,7 @@ class _OrderDetailBody extends StatelessWidget {
               children: [
                 _TimelineCard(order: order),
                 const SizedBox(height: 16),
-                const _MapCard(),
+                _MapCard(order: order),
                 const SizedBox(height: 16),
                 _ProductsCard(order: order),
               ],
@@ -510,166 +514,99 @@ class _TimelineStep {
   });
 }
 
+/// Order map. The order document carries NO delivery coordinates (the customer
+/// app never writes them), and there is no live courier position, so a route
+/// map isn't possible. Instead we show the store's real location when it has
+/// coordinates, and always note that delivery coordinates are missing.
 class _MapCard extends StatelessWidget {
-  const _MapCard();
+  final OrderModel order;
+  const _MapCard({required this.order});
 
   @override
   Widget build(BuildContext context) {
-    return AdminCard.flush(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(9),
-        child: SizedBox(
-          height: 240,
-          child: CustomPaint(
-            painter: _FauxRoutePainter(),
-            child: Stack(
-              children: const [
-                Positioned(
-                  left: 100,
-                  top: 100,
-                  child: _MapPin(
-                      icon: Icons.storefront,
-                      color: AdminColors.primary,
-                      ringColor: Colors.white),
+    return FutureBuilder<StoreModel?>(
+      future: StoreService.get(order.storeId),
+      builder: (context, snap) {
+        final store = snap.data;
+        final hasStoreCoords =
+            store?.latitude != null && store?.longitude != null;
+        return AdminCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Text('Ubicación del comercio',
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13.5, fontWeight: FontWeight.w700)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (snap.connectionState == ConnectionState.waiting)
+                const SizedBox(
+                  height: 170,
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                )
+              else if (hasStoreCoords)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(9),
+                  child: LockedMiniMap(
+                    position: LatLng(store!.latitude!, store.longitude!),
+                    height: 220,
+                  ),
+                )
+              else
+                _NoMapNote(
+                  text: 'El comercio "${order.storeName}" no tiene ubicación '
+                      'definida en el mapa.',
                 ),
-                Positioned(
-                  left: 690,
-                  top: 70,
-                  child: _MapPin(
-                      icon: Icons.location_on,
-                      color: AdminColors.text,
-                      ringColor: Colors.white),
-                ),
-                Positioned(
-                  left: 400,
-                  top: 100,
-                  child: _CourierMarker(),
-                ),
-              ],
-            ),
+              const SizedBox(height: 10),
+              const _NoMapNote(
+                icon: Icons.info_outline,
+                text: 'Este pedido no tiene coordenadas de entrega: la app de '
+                    'cliente no las registra, por lo que no se puede trazar la '
+                    'ruta hasta el cliente.',
+              ),
+            ],
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
-class _FauxRoutePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final bg = Paint()..color = const Color(0xFFDDE7EC);
-    canvas.drawRect(Rect.fromLTWH(0, 0, w, h), bg);
-    final block = Paint()..color = const Color(0xFFE8EEF2);
-    final blocks = [
-      const Rect.fromLTWH(0, 0, 200, 80),
-      const Rect.fromLTWH(220, 0, 280, 80),
-      const Rect.fromLTWH(520, 0, 280, 80),
-      const Rect.fromLTWH(0, 100, 200, 80),
-      const Rect.fromLTWH(220, 100, 280, 80),
-      const Rect.fromLTWH(520, 100, 280, 80),
-      const Rect.fromLTWH(0, 200, 800, 40),
-    ];
-    final scaleX = w / 800;
-    final scaleY = h / 240;
-    for (final b in blocks) {
-      canvas.drawRect(
-          Rect.fromLTWH(b.left * scaleX, b.top * scaleY,
-              b.width * scaleX, b.height * scaleY),
-          block);
-    }
-    final road = Paint()..color = Colors.white;
-    canvas.drawRect(
-        Rect.fromLTWH(0, 80 * scaleY, w, 20 * scaleY), road);
-    canvas.drawRect(
-        Rect.fromLTWH(0, 180 * scaleY, w, 20 * scaleY), road);
-    canvas.drawRect(
-        Rect.fromLTWH(200 * scaleX, 0, 20 * scaleX, h), road);
-    canvas.drawRect(
-        Rect.fromLTWH(500 * scaleX, 0, 20 * scaleX, h), road);
-
-    // Route
-    final path = Path()
-      ..moveTo(120 * scaleX, 130 * scaleY)
-      ..quadraticBezierTo(280 * scaleX, 90 * scaleY, 410 * scaleX, 130 * scaleY)
-      ..quadraticBezierTo(550 * scaleX, 165 * scaleY, 700 * scaleX, 100 * scaleY);
-    final routePaint = Paint()
-      ..color = AdminColors.primary
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round;
-    final dashed = _dashPath(path, dashArray: [6, 6]);
-    canvas.drawPath(dashed, routePaint);
-  }
-
-  Path _dashPath(Path source, {required List<double> dashArray}) {
-    final dest = Path();
-    for (final metric in source.computeMetrics()) {
-      double distance = 0;
-      bool draw = true;
-      while (distance < metric.length) {
-        final length = dashArray[draw ? 0 : 1];
-        if (draw) {
-          dest.addPath(metric.extractPath(distance, distance + length),
-              Offset.zero);
-        }
-        distance += length;
-        draw = !draw;
-      }
-    }
-    return dest;
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _MapPin extends StatelessWidget {
+class _NoMapNote extends StatelessWidget {
+  final String text;
   final IconData icon;
-  final Color color;
-  final Color ringColor;
-  const _MapPin(
-      {required this.icon, required this.color, required this.ringColor});
+  const _NoMapNote({required this.text, this.icon = Icons.location_off_outlined});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 32,
-      height: 32,
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: ringColor,
-        border: Border.all(color: color, width: 3),
+        color: AdminColors.grayTint,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AdminColors.border),
       ),
-      alignment: Alignment.center,
-      child: Icon(icon, size: 14, color: color),
-    );
-  }
-}
-
-class _CourierMarker extends StatelessWidget {
-  const _CourierMarker();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: AdminColors.primary,
-        border: Border.all(color: Colors.white, width: 3),
-        boxShadow: [
-          BoxShadow(
-            color: AdminColors.primary.withValues(alpha: 0.4),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: AdminColors.textMuted),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text,
+                style: const TextStyle(
+                    fontSize: 12, color: AdminColors.textMuted)),
           ),
         ],
       ),
-      alignment: Alignment.center,
-      child: const Icon(Icons.two_wheeler, size: 16, color: Colors.white),
     );
   }
 }

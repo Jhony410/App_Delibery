@@ -12,6 +12,15 @@ class StoreModel {
   final String? promo;
   final String tone;
 
+  /// Teléfono de contacto del local (lo escribe el panel admin). Nullable: los
+  /// comercios sin teléfono registrado lo dejan en null.
+  final String? phone;
+
+  /// Coordenadas del local fijadas por el admin en el mapa. Nullable: los
+  /// comercios creados antes de existir el picker no las tienen.
+  final double? latitude;
+  final double? longitude;
+
   /// Foto real del local subida desde el panel admin (Firebase Storage).
   /// Null/vacío cuando el comercio aún no tiene foto — se usa el asset local.
   final String? imagenUrl;
@@ -29,6 +38,9 @@ class StoreModel {
     this.isOpen = true,
     this.promo,
     this.tone = 'warm',
+    this.phone,
+    this.latitude,
+    this.longitude,
     this.imagenUrl,
   });
 
@@ -45,6 +57,9 @@ class StoreModel {
         address: m['address'],
         promo: m['promo'],
         tone: m['tone'] ?? 'warm',
+        phone: m['phone'],
+        latitude: (m['latitude'] as num?)?.toDouble(),
+        longitude: (m['longitude'] as num?)?.toDouble(),
         imagenUrl: m['imagenUrl'] ?? m['imagen_url'],
       );
 

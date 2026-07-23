@@ -26,7 +26,14 @@ class StoreModel {
   final String? imagenUrl;
   /// Google Maps share link for the store's exact location. Stored as-is (a raw
   /// string, no coordinate parsing) so the courier app can later open it.
+  /// Kept for back-compat; the map picker now writes [latitude]/[longitude]
+  /// instead, but both can coexist.
   final String? mapsUrl;
+  /// Real geographic coordinates of the store, set via the map picker. Nullable
+  /// so stores created before this field existed keep working. Both are either
+  /// present together or both null.
+  final double? latitude;
+  final double? longitude;
   /// Account status: true = comercio activo, false = pausado/suspendido.
   /// Distinct from [isOpen], which reflects whether it's currently open for
   /// orders based on its hours.
@@ -61,6 +68,8 @@ class StoreModel {
     this.ruc,
     this.imagenUrl,
     this.mapsUrl,
+    this.latitude,
+    this.longitude,
     this.activo = true,
     this.pendingApproval = false,
     this.horarios,
@@ -91,6 +100,8 @@ class StoreModel {
         ruc: m['ruc'],
         imagenUrl: m['imagenUrl'] ?? m['imagen_url'],
         mapsUrl: m['mapsUrl'],
+        latitude: (m['latitude'] as num?)?.toDouble(),
+        longitude: (m['longitude'] as num?)?.toDouble(),
         // Default to active when the field is absent so existing stores
         // (written before this field existed) keep showing as "Activo".
         activo: m['activo'] ?? true,
@@ -124,6 +135,8 @@ class StoreModel {
         if (ruc != null) 'ruc': ruc,
         if (imagenUrl != null) 'imagenUrl': imagenUrl,
         if (mapsUrl != null) 'mapsUrl': mapsUrl,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
         'activo': activo,
         'pendingApproval': pendingApproval,
         if (horarios != null) 'horarios': horarios,
@@ -151,6 +164,8 @@ class StoreModel {
     String? ruc,
     String? imagenUrl,
     String? mapsUrl,
+    double? latitude,
+    double? longitude,
     bool? activo,
     bool? pendingApproval,
     Map<String, dynamic>? horarios,
@@ -180,6 +195,8 @@ class StoreModel {
         ruc: ruc ?? this.ruc,
         imagenUrl: imagenUrl ?? this.imagenUrl,
         mapsUrl: mapsUrl ?? this.mapsUrl,
+        latitude: latitude ?? this.latitude,
+        longitude: longitude ?? this.longitude,
         activo: activo ?? this.activo,
         pendingApproval: pendingApproval ?? this.pendingApproval,
         horarios: horarios ?? this.horarios,

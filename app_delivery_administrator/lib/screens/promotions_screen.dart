@@ -79,6 +79,8 @@ class _PromotionsScreenState extends State<PromotionsScreen> {
   }
 }
 
+/// Metric cards — content-sized Row/Expanded layout (never a fixed
+/// aspect-ratio GridView, which caused bottom overflow on narrow widths).
 class _Metrics extends StatelessWidget {
   final List<(String, String, Color)> items;
   const _Metrics({required this.items});
@@ -86,35 +88,55 @@ class _Metrics extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, c) {
       final cols = c.maxWidth > 1100 ? 4 : 2;
-      return GridView.count(
-        crossAxisCount: cols,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        childAspectRatio: 4.0,
-        children: items
-            .map((m) => AdminCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(m.$1,
-                          style: const TextStyle(
-                              fontSize: 12,
-                              color: AdminColors.textMuted,
-                              fontWeight: FontWeight.w500)),
-                      const SizedBox(height: 4),
-                      Text(m.$2,
-                          style: GoogleFonts.plusJakartaSans(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
-                              color: m.$3)),
-                    ],
+      return Column(
+        children: [
+          for (var i = 0; i < items.length; i += cols) ...[
+            if (i > 0) const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var j = i; j < i + cols; j++) ...[
+                  if (j > i) const SizedBox(width: 16),
+                  Expanded(
+                    child: j < items.length
+                        ? _MetricCard(item: items[j])
+                        : const SizedBox.shrink(),
                   ),
-                ))
-            .toList(),
+                ],
+              ],
+            ),
+          ],
+        ],
       );
     });
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  final (String, String, Color) item;
+  const _MetricCard({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return AdminCard(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(item.$1,
+              style: const TextStyle(
+                  fontSize: 12,
+                  color: AdminColors.textMuted,
+                  fontWeight: FontWeight.w500)),
+          const SizedBox(height: 4),
+          Text(item.$2,
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: item.$3)),
+        ],
+      ),
+    );
   }
 }
 

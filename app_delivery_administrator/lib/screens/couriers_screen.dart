@@ -30,6 +30,10 @@ class CouriersScreen extends StatelessWidget {
       child: StreamBuilder<List<CourierModel>>(
         stream: CourierService.streamAll(),
         builder: (context, snap) {
+          if (snap.hasError) {
+            debugPrint('CouriersScreen stream error: ${snap.error}');
+            return AdminErrorState(message: '${snap.error}');
+          }
           final couriers = snap.data ?? const <CourierModel>[];
           final total = couriers.length;
           final inDelivery =
@@ -318,14 +322,20 @@ class _Th extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       flex: flex,
-      child: Text(
-        label.toUpperCase(),
-        textAlign: align,
-        style: const TextStyle(
-            fontSize: 11,
-            color: AdminColors.textMuted,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.6),
+      // Horizontal padding keeps adjacent uppercase labels from touching when a
+      // right-aligned column is followed by a left-aligned one (e.g. RATING /
+      // DOCUMENTOS).
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Text(
+          label.toUpperCase(),
+          textAlign: align,
+          style: const TextStyle(
+              fontSize: 11,
+              color: AdminColors.textMuted,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.6),
+        ),
       ),
     );
   }

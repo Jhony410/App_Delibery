@@ -12,6 +12,7 @@ import '../services/store_service.dart';
 import '../theme.dart';
 import '../widgets/admin_shell.dart';
 import '../widgets/admin_widgets.dart';
+import '../widgets/map_location_picker.dart';
 
 const _monthAbbr = [
   'ene', 'feb', 'mar', 'abr', 'may', 'jun',
@@ -84,6 +85,10 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
   late final TextEditingController _contacto;
   late final TextEditingController _mapsUrl;
 
+  // Store coordinates set via the map picker (null = not defined yet).
+  double? _lat;
+  double? _lng;
+
   bool _savingGeneral = false;
   bool _togglingStatus = false;
   bool _uploadingImage = false;
@@ -115,6 +120,8 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
     _email = TextEditingController(text: _store.email ?? '');
     _contacto = TextEditingController(text: _store.contacto ?? '');
     _mapsUrl = TextEditingController(text: _store.mapsUrl ?? '');
+    _lat = _store.latitude;
+    _lng = _store.longitude;
     if (_store.id.isNotEmpty) _refreshStats();
   }
 
@@ -150,7 +157,7 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
   Future<void> _saveGeneral() async {
     if (_store.id.isEmpty) return;
     setState(() => _savingGeneral = true);
-    final fields = {
+    final fields = <String, dynamic>{
       'name': _name.text.trim(),
       'ruc': _ruc.text.trim(),
       'category': _category.text.trim(),
@@ -160,20 +167,25 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
       'email': _email.text.trim(),
       'contacto': _contacto.text.trim(),
       'mapsUrl': _mapsUrl.text.trim(),
+      // Only written once the admin defines a location; null-safe for old stores.
+      if (_lat != null) 'latitude': _lat,
+      if (_lng != null) 'longitude': _lng,
     };
     try {
       await StoreService.updateStore(_store.id, fields);
       setState(() {
         _store = _store.copyWith(
-          name: fields['name'],
-          ruc: fields['ruc'],
-          category: fields['category'],
-          district: fields['district'],
-          address: fields['address'],
-          phone: fields['phone'],
-          email: fields['email'],
-          contacto: fields['contacto'],
-          mapsUrl: fields['mapsUrl'],
+          name: fields['name'] as String,
+          ruc: fields['ruc'] as String,
+          category: fields['category'] as String,
+          district: fields['district'] as String,
+          address: fields['address'] as String,
+          phone: fields['phone'] as String,
+          email: fields['email'] as String,
+          contacto: fields['contacto'] as String,
+          mapsUrl: fields['mapsUrl'] as String,
+          latitude: _lat,
+          longitude: _lng,
         );
         _savingGeneral = false;
       });
@@ -426,6 +438,12 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
         email: _email,
         contacto: _contacto,
         mapsUrl: _mapsUrl,
+        latitude: _lat,
+        longitude: _lng,
+        onPickLocation: (lat, lng) => setState(() {
+          _lat = lat;
+          _lng = lng;
+        }),
         saving: _savingGeneral,
         onSave: _saveGeneral,
         activo: _store.activo,
@@ -553,6 +571,9 @@ class _TabsBar extends StatelessWidget {
 class _GeneralForm extends StatelessWidget {
   final TextEditingController name, ruc, category, district, address, phone,
       email, contacto, mapsUrl;
+  final double? latitude;
+  final double? longitude;
+  final void Function(double lat, double lng) onPickLocation;
   final bool saving;
   final VoidCallback onSave;
   final bool activo;
@@ -572,6 +593,9 @@ class _GeneralForm extends StatelessWidget {
     required this.email,
     required this.contacto,
     required this.mapsUrl,
+    required this.latitude,
+    required this.longitude,
+    required this.onPickLocation,
     required this.saving,
     required this.onSave,
     required this.activo,
@@ -635,11 +659,19 @@ class _GeneralForm extends StatelessWidget {
                   .toList(),
             );
           }),
-          const SizedBox(height: 14),
+          const SizedBox(height: 18),
+          StoreLocationField(
+            latitude: latitude,
+            longitude: longitude,
+            onPicked: onPickLocation,
+          ),
+          const SizedBox(height: 18),
+          // mapsUrl kept as an optional secondary field (no longer the primary
+          // way to define the location). Old stores may still carry it.
           AdminTextField(
-            label: 'Link de Google Maps (ubicación exacta)',
+            label: 'Link de Google Maps (opcional)',
             controller: mapsUrl,
-            hint: 'Pega el enlace que Google Maps genera al compartir',
+            hint: 'Enlace de referencia; la ubicación real se define en el mapa',
             keyboardType: TextInputType.url,
           ),
           const SizedBox(height: 18),

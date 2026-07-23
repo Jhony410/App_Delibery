@@ -83,6 +83,11 @@ class CartService {
 
   static String selectedAddress = 'Av. Arequipa 2450, Lince';
   static String? selectedAddressRef;
+  // Coordinates of the delivery address the customer picked at checkout. Stamped
+  // in cart_screen from the chosen AddressModel so they survive into the order.
+  // Null when the selected address has no coordinates saved.
+  static double? selectedAddressLat;
+  static double? selectedAddressLng;
   static String? lastDeliveryTime;
 
   /// Sets the store the user is currently browsing. Does NOT clear the cart —
@@ -160,6 +165,8 @@ class CartService {
     storeTone = null;
     deliveryTime = null;
     currentDeliveryFee = 0;
+    selectedAddressLat = null;
+    selectedAddressLng = null;
   }
 
   /// Cart items grouped by store, preserving first-seen order.

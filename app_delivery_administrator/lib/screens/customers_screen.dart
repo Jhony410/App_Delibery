@@ -25,6 +25,10 @@ class CustomersScreen extends StatelessWidget {
       child: StreamBuilder<List<CustomerModel>>(
         stream: CustomerService.streamAll(limit: 200),
         builder: (context, snap) {
+          if (snap.hasError) {
+            debugPrint('CustomersScreen stream error: ${snap.error}');
+            return AdminErrorState(message: '${snap.error}');
+          }
           final customers = snap.data ?? const <CustomerModel>[];
           final activeCount =
               customers.where((c) => c.totalOrders > 0).length;
@@ -42,14 +46,11 @@ class CustomersScreen extends StatelessWidget {
             children: [
               _MetricsRow(
                 items: [
-                  ('Total', '${customers.length}', '+412 mes'),
-                  ('Activos', '$activeCount',
-                      customers.isEmpty
-                          ? '—'
-                          : '${(activeCount / customers.length * 100).toStringAsFixed(1)}%'),
-                  ('VIP', '$vipCount', 'Top 5%'),
+                  ('Total', '${customers.length}', null),
+                  ('Activos', '$activeCount', AdminColors.green),
+                  ('VIP', '$vipCount', AdminColors.purple),
                   ('Ticket prom.',
-                      'S/ ${avgTicket.toStringAsFixed(2)}', '+S/ 2.10'),
+                      'S/ ${avgTicket.toStringAsFixed(2)}', null),
                 ],
               ),
               const SizedBox(height: 16),
@@ -63,47 +64,65 @@ class CustomersScreen extends StatelessWidget {
   }
 }
 
+/// Metric cards — content-sized Row/Expanded layout (never a fixed
+/// aspect-ratio GridView, which was the source of the bottom overflow).
 class _MetricsRow extends StatelessWidget {
-  final List<(String, String, String)> items;
+  final List<(String, String, Color?)> items;
   const _MetricsRow({required this.items});
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, c) {
       final cols = c.maxWidth > 1100 ? 4 : 2;
-      return GridView.count(
-        crossAxisCount: cols,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        childAspectRatio: 3.6,
-        children: items
-            .map((m) => AdminCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(m.$1,
-                          style: const TextStyle(
-                              fontSize: 12,
-                              color: AdminColors.textMuted,
-                              fontWeight: FontWeight.w500)),
-                      const SizedBox(height: 4),
-                      Text(m.$2,
-                          style: GoogleFonts.plusJakartaSans(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 2),
-                      Text(m.$3,
-                          style: const TextStyle(
-                              fontSize: 11,
-                              color: AdminColors.green,
-                              fontWeight: FontWeight.w600)),
-                    ],
+      return Column(
+        children: [
+          for (var i = 0; i < items.length; i += cols) ...[
+            if (i > 0) const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var j = i; j < i + cols; j++) ...[
+                  if (j > i) const SizedBox(width: 16),
+                  Expanded(
+                    child: j < items.length
+                        ? _MetricCard(item: items[j])
+                        : const SizedBox.shrink(),
                   ),
-                ))
-            .toList(),
+                ],
+              ],
+            ),
+          ],
+        ],
       );
     });
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  final (String, String, Color?) item;
+  const _MetricCard({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return AdminCard(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(item.$1,
+              style: const TextStyle(
+                  fontSize: 12,
+                  color: AdminColors.textMuted,
+                  fontWeight: FontWeight.w500)),
+          const SizedBox(height: 4),
+          Text(item.$2,
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.4,
+                  color: item.$3 ?? AdminColors.text)),
+        ],
+      ),
+    );
   }
 }
 
@@ -281,13 +300,19 @@ class _Th extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       flex: flex,
-      child: Text(label.toUpperCase(),
-          textAlign: align,
-          style: const TextStyle(
-              fontSize: 11,
-              color: AdminColors.textMuted,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.6)),
+      // Horizontal padding keeps adjacent uppercase labels from touching when a
+      // right-aligned column is followed by a left-aligned one (e.g. RATING /
+      // SEGMENTO).
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Text(label.toUpperCase(),
+            textAlign: align,
+            style: const TextStyle(
+                fontSize: 11,
+                color: AdminColors.textMuted,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.6)),
+      ),
     );
   }
 }

@@ -19,6 +19,11 @@ dependencies:
   firebase_storage: ^12.4.10
   image_picker: ^1.2.3
   image: ^4.1.7
+  # Maps: real Google Maps for the location picker + live map (web target).
+  # The web implementation is a separate federated plugin. The API key lives
+  # only in web/index.html — never in Dart code.
+  google_maps_flutter: ^2.17.1
+  google_maps_flutter_web: ^0.6.2
 
 dev_dependencies:
   flutter_test:

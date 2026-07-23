@@ -69,6 +69,10 @@ class _StoresScreenState extends State<StoresScreen> {
       child: StreamBuilder<List<StoreModel>>(
         stream: StoreService.getStoresStream(),
         builder: (context, snap) {
+          if (snap.hasError) {
+            debugPrint('StoresScreen stream error: ${snap.error}');
+            return AdminErrorState(message: '${snap.error}');
+          }
           final stores = snap.data ?? const <StoreModel>[];
           final active = stores.where((s) => s.activo).length;
           final paused = stores.where((s) => !s.activo).length;

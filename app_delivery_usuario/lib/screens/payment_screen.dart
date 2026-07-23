@@ -66,6 +66,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
         storeName: CartService.cartStoreName ?? '',
         storeTone: CartService.cartStoreTone ?? 'warm',
         storeAddress: store?.address,
+        storePhone: store?.phone,
+        // Coordinates propagated to the order so the courier + tracking maps
+        // have real destinations. Any of these may be null (store/address
+        // without coordinates); the order is created regardless — never blocked.
+        storeLat: store?.latitude,
+        storeLng: store?.longitude,
+        deliveryLat: CartService.selectedAddressLat,
+        deliveryLng: CartService.selectedAddressLng,
         items: CartService.toOrderItems(),
         subtotal: CartService.subtotal,
         deliveryFee: CartService.deliveryFee,

@@ -34,6 +34,11 @@ class OrderModel {
   final String? storePhone;
   final String? customerName;
   final String? customerPhone;
+  // Coordinates propagated by the customer app at order creation. All nullable.
+  final double? storeLat;
+  final double? storeLng;
+  final double? deliveryLat;
+  final double? deliveryLng;
   final List<OrderItem> items;
   final double subtotal;
   final double deliveryFee;
@@ -66,6 +71,10 @@ class OrderModel {
     this.storePhone,
     this.customerName,
     this.customerPhone,
+    this.storeLat,
+    this.storeLng,
+    this.deliveryLat,
+    this.deliveryLng,
     required this.items,
     required this.subtotal,
     required this.deliveryFee,
@@ -97,6 +106,10 @@ class OrderModel {
         storePhone: m['storePhone'],
         customerName: m['customerName'],
         customerPhone: m['customerPhone'],
+        storeLat: (m['storeLat'] as num?)?.toDouble(),
+        storeLng: (m['storeLng'] as num?)?.toDouble(),
+        deliveryLat: (m['deliveryLat'] as num?)?.toDouble(),
+        deliveryLng: (m['deliveryLng'] as num?)?.toDouble(),
         items: (m['items'] as List? ?? [])
             .map((i) => OrderItem.fromMap(Map<String, dynamic>.from(i as Map)))
             .toList(),
