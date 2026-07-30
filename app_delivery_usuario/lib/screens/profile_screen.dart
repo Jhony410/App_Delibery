@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../models/user_model.dart';
@@ -5,6 +6,7 @@ import '../models/address_model.dart';
 import '../models/favorite_model.dart';
 import '../services/db_service.dart';
 import '../services/auth_service.dart';
+import '../services/biometric_auth_service.dart';
 import 'addresses_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -272,6 +274,7 @@ class ProfileScreen extends StatelessWidget {
                 },
               ),
             ),
+            const _BiometricMenuRow(),
             _MenuRow(
               icon: Icons.help_outline,
               label: 'Ayuda y soporte',
@@ -495,6 +498,205 @@ class _MenuRow extends StatelessWidget {
                   size: 18, color: AppColors.textSubtle),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Fila del menú con un Switch en línea para activar el acceso con huella.
+///
+/// Es el único trozo con estado del perfil, por eso vive aparte: `ProfileScreen`
+/// sigue siendo un `StatelessWidget`.
+class _BiometricMenuRow extends StatefulWidget {
+  const _BiometricMenuRow();
+
+  @override
+  State<_BiometricMenuRow> createState() => _BiometricMenuRowState();
+}
+
+class _BiometricMenuRowState extends State<_BiometricMenuRow> {
+  bool _available = false;
+  bool _enabled = false;
+  bool _busy = false;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final available = await BiometricAuthService.isBiometricAvailable();
+      final enabled = await BiometricAuthService.hasSavedCredentials();
+      if (!mounted) return;
+      setState(() {
+        _available = available;
+        _enabled = enabled;
+        _loaded = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
+    }
+  }
+
+  Future<void> _onToggle(bool value) async {
+    if (_busy) return;
+    if (!value) {
+      await _disable();
+      return;
+    }
+    await _enable();
+  }
+
+  Future<void> _enable() async {
+    final email = AuthService.currentUser?.email;
+    if (email == null) {
+      _snack('No hay una sesión activa', ok: false);
+      return;
+    }
+    // La contraseña no está en memoria tras el login, así que se pide de nuevo:
+    // sirve de confirmación y evita guardar una contraseña equivocada.
+    final password = await _askPassword();
+    if (password == null || password.isEmpty) return;
+
+    setState(() => _busy = true);
+    try {
+      final verified = await BiometricAuthService.authenticate(
+        reason: 'Verifica tu huella para activar el acceso rápido',
+      );
+      if (!verified) {
+        if (mounted) setState(() => _busy = false);
+        return;
+      }
+      await BiometricAuthService.saveCredentials(email, password);
+      if (!mounted) return;
+      setState(() => _enabled = true);
+      _snack('Acceso con huella activado', ok: true);
+    } on BiometricUnavailableException catch (e) {
+      _snack(e.message, ok: false);
+    } on FirebaseAuthException catch (e) {
+      final msg = switch (e.code) {
+        'wrong-password' || 'invalid-credential' =>
+          'La contraseña es incorrecta',
+        'too-many-requests' => 'Demasiados intentos. Espera unos minutos',
+        _ => 'No se pudo activar el acceso con huella',
+      };
+      _snack(msg, ok: false);
+    } catch (_) {
+      _snack('No se pudo activar el acceso con huella', ok: false);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _disable() async {
+    setState(() => _busy = true);
+    try {
+      await BiometricAuthService.clearCredentials();
+      if (!mounted) return;
+      setState(() => _enabled = false);
+      _snack('Acceso con huella desactivado', ok: true);
+    } catch (_) {
+      _snack('No se pudo desactivar el acceso con huella', ok: false);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<String?> _askPassword() async {
+    final ctrl = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirma tu contraseña'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Se guardará cifrada en este dispositivo para poder ingresar '
+              'con tu huella.',
+              style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Contraseña'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar',
+                style: TextStyle(color: AppColors.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            child: const Text('Continuar',
+                style: TextStyle(
+                    color: AppColors.primary, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    return result;
+  }
+
+  void _snack(String msg, {required bool ok}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: ok ? AppColors.secondary : AppColors.danger,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Sin sensor o sin huella registrada la fila no aporta nada: se oculta.
+    if (!_loaded || !_available) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.bg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.fingerprint,
+                size: 18, color: AppColors.appText),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Text('Acceso con huella',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+          ),
+          if (_busy)
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppColors.primary),
+            )
+          else
+            Switch(
+              value: _enabled,
+              activeThumbColor: Colors.white,
+              activeTrackColor: AppColors.primary,
+              onChanged: _onToggle,
+            ),
+        ],
       ),
     );
   }

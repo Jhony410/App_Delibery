@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/courier_model.dart';
+import 'biometric_auth_service.dart';
 
 class AuthService {
   static final _auth = FirebaseAuth.instance;
@@ -50,6 +51,11 @@ class AuthService {
     return courier;
   }
 
+  /// Cerrar sesión NO borra las credenciales del acceso con huella: si lo
+  /// hiciera, al volver al login el botón de huella nunca aparecería, que es
+  /// justo cuando hace falta. El acceso guardado se borra al desactivar el
+  /// toggle en Seguridad o cuando Firebase rechaza la contraseña por haber
+  /// cambiado (ver [BiometricAuthService.signInWithBiometrics]).
   static Future<void> signOut() => _auth.signOut();
 
   static Future<void> sendPasswordReset(String email) =>

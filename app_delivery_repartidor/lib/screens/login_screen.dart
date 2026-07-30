@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/biometric_auth_service.dart';
 import '../theme.dart';
 import '../widgets.dart';
 
@@ -18,11 +19,65 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
   String? _error;
 
+  /// Solo se muestra el botón de huella si el dispositivo la soporta Y el
+  /// repartidor ya activó la opción antes desde Seguridad y privacidad.
+  bool _biometricReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBiometrics();
+  }
+
   @override
   void dispose() {
     _emailCtrl.dispose();
     _passCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _checkBiometrics() async {
+    try {
+      final available = await BiometricAuthService.isBiometricAvailable();
+      final saved = await BiometricAuthService.hasSavedCredentials();
+      if (mounted) setState(() => _biometricReady = available && saved);
+    } catch (_) {
+      // Sin biometría el formulario tradicional sigue intacto: no hay nada que
+      // informarle al repartidor.
+    }
+  }
+
+  Future<void> _signInWithBiometrics() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final result = await BiometricAuthService.signInWithBiometrics();
+      if (!mounted) return;
+      final courier = result.courier;
+      if (courier != null) {
+        if (courier.status == 'pending_review') {
+          Navigator.of(context).pushReplacementNamed('/review');
+        } else {
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
+        return;
+      }
+      // Cancelar no es un error: el repartidor vuelve al formulario sin ruido.
+      if (result.canceled) return;
+      setState(() => _error = result.error);
+      // Si las credenciales se borraron por estar obsoletas, el botón debe
+      // desaparecer hasta que vuelva a activarlo desde Seguridad.
+      await _checkBiometrics();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'No pudimos ingresar con tu huella.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _signIn() async {
@@ -165,6 +220,16 @@ class _LoginScreenState extends State<LoginScreen> {
                 size: CButtonSize.xl,
                 onPressed: _loading ? null : _signIn,
               ),
+              if (_biometricReady) ...[
+                const SizedBox(height: 12),
+                CButton(
+                  label: 'Ingresar con huella',
+                  icon: Icons.fingerprint_rounded,
+                  size: CButtonSize.xl,
+                  variant: CButtonVariant.ghost,
+                  onPressed: _loading ? null : _signInWithBiometrics,
+                ),
+              ],
               const SizedBox(height: 22),
               Center(
                 child: GestureDetector(

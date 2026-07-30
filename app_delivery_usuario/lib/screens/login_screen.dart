@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import '../services/auth_service.dart';
+import '../services/biometric_auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,11 +17,63 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
   bool _obscure = true;
 
+  /// Solo se muestra el botón de huella si el dispositivo la soporta Y el
+  /// usuario ya activó la opción antes desde su perfil.
+  bool _biometricReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBiometrics();
+  }
+
   @override
   void dispose() {
     _email.dispose();
     _pass.dispose();
     super.dispose();
+  }
+
+  Future<void> _checkBiometrics() async {
+    try {
+      final available = await BiometricAuthService.isBiometricAvailable();
+      final saved = await BiometricAuthService.hasSavedCredentials();
+      if (mounted) setState(() => _biometricReady = available && saved);
+    } catch (_) {
+      // Sin biometría el formulario tradicional sigue intacto: no hay nada que
+      // informarle al usuario.
+    }
+  }
+
+  Future<void> _signInWithBiometrics() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    try {
+      final result = await BiometricAuthService.signInWithBiometrics();
+      if (!mounted) return;
+      if (result.isSuccess) {
+        Navigator.pushReplacementNamed(context, '/home');
+        return;
+      }
+      // Cancelar no es un error: el usuario simplemente vuelve al formulario.
+      if (result.canceled) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(result.error ?? 'No pudimos ingresar con tu huella'),
+        backgroundColor: AppColors.danger,
+      ));
+      // Si las credenciales se borraron por estar obsoletas, el botón debe
+      // desaparecer hasta que el usuario vuelva a activarlo desde su perfil.
+      await _checkBiometrics();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No pudimos ingresar con tu huella'),
+          backgroundColor: AppColors.danger,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _signIn() async {
@@ -127,6 +180,16 @@ class _LoginScreenState extends State<LoginScreen> {
                   ? const Center(
                       child: CircularProgressIndicator(color: AppColors.primary))
                   : AppButton(label: 'Ingresar', onTap: _signIn),
+              if (_biometricReady && !_loading) ...[
+                const SizedBox(height: 12),
+                AppButton(
+                  label: 'Ingresar con huella',
+                  variant: 'ghost',
+                  onTap: _signInWithBiometrics,
+                  leading: const Icon(Icons.fingerprint,
+                      size: 22, color: AppColors.primary),
+                ),
+              ],
               const SizedBox(height: 28),
               Center(
                 child: GestureDetector(
