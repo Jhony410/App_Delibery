@@ -66,11 +66,13 @@ flutter_launcher_icons:
   windows:
     generate: true
     icon_size: 256
-  # Base: sin alfa (iOS lo exige) y esquinas blancas.
+  # Los tres derivados llevan SOLO el pin, sin la palabra "DeliPuno": a tamano
+  # de launcher (~48dp) el texto del logo completo es ilegible.
+  # Base: sin alfa (iOS lo exige) y fondo blanco.
   image_path: "assets/icon/icon_ios.png"
   # Android legacy: esquinas redondeadas transparentes.
   image_path_android: "assets/icon/icon_android.png"
-  # Android adaptativo: el logo va en la zona segura sobre fondo blanco,
+  # Android adaptativo: el pin va en la zona segura sobre fondo blanco,
   # porque el launcher recorta ~33% del borde.
   adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/icon/icon_foreground.png"

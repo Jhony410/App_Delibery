@@ -9,78 +9,58 @@ public static class IconGen
 {
     static Bitmap Load(string p) { using (var t = new Bitmap(p)) return new Bitmap(t); }
 
-    // Devuelve copia 32bpp con: negro de fondo -> transparente (o blanco)
-    public static Bitmap Normalize(string src, bool blackToWhite)
+    // El logo es azul/cian sobre blanco, con esquinas negras: solo cuentan como
+    // contenido los pixeles con color real, asi el antialias gris del borde
+    // redondeado no infla el bbox.
+    static bool IsColored(Color c)
+    {
+        int mx = Math.Max(c.R, Math.Max(c.G, c.B));
+        int mn = Math.Min(c.R, Math.Min(c.G, c.B));
+        return mx - mn >= 40;
+    }
+
+    // Recorta SOLO el simbolo (pin + lineas de velocidad), dejando fuera la
+    // palabra "DeliPuno": a tamano de launcher el texto es ilegible.
+    //
+    // El corte se detecta solo. El logo es "simbolo + espacio + palabra", y ese
+    // espacio es una franja de columnas vacias bastante mas ancha que los huecos
+    // entre letras (34px vs 9-25px en el icon.png actual). Cortamos en la primera
+    // franja vacia que supere minGapRatio del ancho.
+    public static Bitmap Symbol(string src, double minGapRatio)
     {
         Bitmap s = Load(src);
-        Bitmap o = new Bitmap(s.Width, s.Height, PixelFormat.Format32bppArgb);
-        for (int y = 0; y < s.Height; y++)
-            for (int x = 0; x < s.Width; x++)
-            {
-                Color c = s.GetPixel(x, y);
-                int max = Math.Max(c.R, Math.Max(c.G, c.B));
-                if (max < 40)
-                    o.SetPixel(x, y, blackToWhite ? Color.White : Color.FromArgb(0, 255, 255, 255));
-                else
-                    o.SetPixel(x, y, Color.FromArgb(255, c.R, c.G, c.B));
-            }
-        s.Dispose();
-        return o;
-    }
 
-    public static Bitmap Resize(Bitmap src, int size)
-    {
-        Bitmap o = new Bitmap(size, size, PixelFormat.Format32bppArgb);
-        using (Graphics g = Graphics.FromImage(o))
+        int[] cols = new int[s.Width];
+        for (int x = 0; x < s.Width; x++)
+            for (int y = 0; y < s.Height; y++)
+                if (IsColored(s.GetPixel(x, y))) cols[x]++;
+
+        int first = -1, last = -1;
+        for (int x = 0; x < s.Width; x++)
+            if (cols[x] > 0) { if (first < 0) first = x; last = x; }
+
+        int minGap = (int)Math.Round(s.Width * minGapRatio);
+        int end = last, run = 0;
+        for (int x = first; x <= last; x++)
         {
-            g.Clear(Color.Transparent);
-            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-            g.SmoothingMode = SmoothingMode.HighQuality;
-            g.DrawImage(src, new Rectangle(0, 0, size, size));
+            if (cols[x] == 0) run++;
+            else { if (run >= minGap) { end = x - run - 1; break; } run = 0; }
         }
-        return o;
-    }
 
-    public static Bitmap Flatten(Bitmap src, int size)
-    {
-        Bitmap o = new Bitmap(size, size, PixelFormat.Format24bppRgb);
-        using (Graphics g = Graphics.FromImage(o))
-        {
-            g.Clear(Color.White);
-            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-            g.SmoothingMode = SmoothingMode.HighQuality;
-            g.DrawImage(src, new Rectangle(0, 0, size, size));
-        }
-        return o;
-    }
+        int minY = s.Height, maxY = -1;
+        for (int x = first; x <= end; x++)
+            for (int y = 0; y < s.Height; y++)
+                if (IsColored(s.GetPixel(x, y)))
+                { if (y < minY) minY = y; if (y > maxY) maxY = y; }
 
-    // Foreground adaptativo: recorta el contenido (ni blanco ni negro),
-    // vuelve el blanco transparente y lo escala dentro de la zona segura.
-    public static Bitmap Foreground(string src, int size, double safe)
-    {
-        Bitmap s = Load(src);
-        int minX = s.Width, minY = s.Height, maxX = -1, maxY = -1;
-        for (int y = 0; y < s.Height; y++)
-            for (int x = 0; x < s.Width; x++)
-            {
-                Color c = s.GetPixel(x, y);
-                int mx = Math.Max(c.R, Math.Max(c.G, c.B));
-                int mn = Math.Min(c.R, Math.Min(c.G, c.B));
-                // el logo es azul/cian: solo cuentan los pixeles con color real,
-                // asi el antialias gris del borde redondeado no infla el bbox
-                if (mx - mn < 40) continue;
-                if (x < minX) minX = x; if (x > maxX) maxX = x;
-                if (y < minY) minY = y; if (y > maxY) maxY = y;
-            }
         // margen para no cortar el antialias del propio logo
         int pad = 6;
-        minX = Math.Max(0, minX - pad); minY = Math.Max(0, minY - pad);
-        maxX = Math.Min(s.Width - 1, maxX + pad); maxY = Math.Min(s.Height - 1, maxY + pad);
+        int minX = Math.Max(0, first - pad), maxX = Math.Min(s.Width - 1, end + pad);
+        minY = Math.Max(0, minY - pad); maxY = Math.Min(s.Height - 1, maxY + pad);
         int w = maxX - minX + 1, h = maxY - minY + 1;
-        Console.WriteLine("bbox: x=" + minX + " y=" + minY + " w=" + w + " h=" + h);
+        Console.WriteLine("simbolo: x=" + minX + ".." + maxX + " y=" + minY + ".." + maxY + " (" + w + "x" + h + ")");
 
+        // el fondo (blanco y negro) se vuelve transparente; queda el logo suelto
         Bitmap crop = new Bitmap(w, h, PixelFormat.Format32bppArgb);
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
@@ -92,48 +72,95 @@ public static class IconGen
                 else crop.SetPixel(x, y, Color.FromArgb(255, c.R, c.G, c.B));
             }
         s.Dispose();
+        return crop;
+    }
 
-        double box = size * safe;
-        double sc = Math.Min(box / w, box / h);
-        int dw = (int)Math.Round(w * sc), dh = (int)Math.Round(h * sc);
+    static void DrawCentered(Graphics g, Bitmap sym, int size, double scale)
+    {
+        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        g.SmoothingMode = SmoothingMode.HighQuality;
+        double box = size * scale;
+        double sc = Math.Min(box / sym.Width, box / sym.Height);
+        int dw = (int)Math.Round(sym.Width * sc), dh = (int)Math.Round(sym.Height * sc);
+        g.DrawImage(sym, new Rectangle((size - dw) / 2, (size - dh) / 2, dw, dh));
+    }
 
+    // iOS / web / Windows: fondo blanco solido, sin alfa (iOS lo exige).
+    public static Bitmap Flat(Bitmap sym, int size, double scale)
+    {
+        Bitmap o = new Bitmap(size, size, PixelFormat.Format24bppRgb);
+        using (Graphics g = Graphics.FromImage(o))
+        {
+            g.Clear(Color.White);
+            DrawCentered(g, sym, size, scale);
+        }
+        return o;
+    }
+
+    // Android legacy: cuadrado blanco de esquinas redondeadas sobre transparente.
+    public static Bitmap Rounded(Bitmap sym, int size, double scale, double radiusRatio)
+    {
         Bitmap o = new Bitmap(size, size, PixelFormat.Format32bppArgb);
         using (Graphics g = Graphics.FromImage(o))
         {
             g.Clear(Color.Transparent);
-            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-            g.SmoothingMode = SmoothingMode.HighQuality;
-            g.DrawImage(crop, new Rectangle((size - dw) / 2, (size - dh) / 2, dw, dh));
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            int d = (int)Math.Round(size * radiusRatio * 2);
+            using (GraphicsPath p = new GraphicsPath())
+            {
+                p.AddArc(0, 0, d, d, 180, 90);
+                p.AddArc(size - d - 1, 0, d, d, 270, 90);
+                p.AddArc(size - d - 1, size - d - 1, d, d, 0, 90);
+                p.AddArc(0, size - d - 1, d, d, 90, 90);
+                p.CloseFigure();
+                g.FillPath(Brushes.White, p);
+            }
+            DrawCentered(g, sym, size, scale);
         }
-        crop.Dispose();
+        return o;
+    }
+
+    // Android adaptativo: solo el simbolo sobre transparente; el fondo blanco
+    // lo pone adaptive_icon_background.
+    public static Bitmap Foreground(Bitmap sym, int size, double scale)
+    {
+        Bitmap o = new Bitmap(size, size, PixelFormat.Format32bppArgb);
+        using (Graphics g = Graphics.FromImage(o))
+        {
+            g.Clear(Color.Transparent);
+            DrawCentered(g, sym, size, scale);
+        }
         return o;
     }
 }
 '@ -ReferencedAssemblies System.Drawing
 
-$dir = "D:\Aplicacion Delibery Puno\app_delivery_usuario\assets\icon"
+$dir = $PSScriptRoot
 $src = "$dir\icon.png"
 
-# 1) Android legacy: esquinas transparentes
-$n = [IconGen]::Normalize($src, $false)
-$a = [IconGen]::Resize($n, 1024)
-$a.Save("$dir\icon_android.png", [System.Drawing.Imaging.ImageFormat]::Png)
-$a.Dispose(); $n.Dispose()
+# Simbolo recortado, reutilizado por los tres derivados.
+$sym = [IconGen]::Symbol($src, 0.02)
 
-# 2) iOS / web: sin alfa, esquinas blancas
-$n2 = [IconGen]::Normalize($src, $true)
-$f = [IconGen]::Flatten($n2, 1024)
+# 1) Android legacy: esquinas redondeadas transparentes.
+$a = [IconGen]::Rounded($sym, 1024, 0.72, 0.22)
+$a.Save("$dir\icon_android.png", [System.Drawing.Imaging.ImageFormat]::Png)
+$a.Dispose()
+
+# 2) iOS / web / Windows: sin alfa, fondo blanco de borde a borde.
+$f = [IconGen]::Flat($sym, 1024, 0.72)
 $f.Save("$dir\icon_ios.png", [System.Drawing.Imaging.ImageFormat]::Png)
-$f.Dispose(); $n2.Dispose()
+$f.Dispose()
 
 # 3) Foreground adaptativo.
 # flutter_launcher_icons envuelve el drawable en <inset android:inset="16%">,
-# o sea que solo queda el 68% del lienzo. Para que el logo termine ocupando
+# o sea que solo queda el 68% del lienzo. Para que el simbolo termine ocupando
 # ~54% del icono de 108dp (=58dp, dentro de la zona segura de 66dp) hay que
 # dibujarlo al 0.54/0.68 = 0.79 de este PNG.
-$fg = [IconGen]::Foreground($src, 1024, 0.79)
+$fg = [IconGen]::Foreground($sym, 1024, 0.79)
 $fg.Save("$dir\icon_foreground.png", [System.Drawing.Imaging.ImageFormat]::Png)
 $fg.Dispose()
 
-Get-ChildItem $dir | Select-Object Name, Length
+$sym.Dispose()
+
+Get-ChildItem $dir -Filter *.png | Select-Object Name, Length
