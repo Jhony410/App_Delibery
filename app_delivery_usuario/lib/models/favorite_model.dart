@@ -21,8 +21,8 @@ class FavoriteModel {
       );
 
   Map<String, dynamic> toMap() => {
-        'storeId': storeId,
-        'storeName': storeName,
-        'createdAt': FieldValue.serverTimestamp(),
-      };
+    'storeId': storeId,
+    'storeName': storeName,
+    'createdAt': FieldValue.serverTimestamp(),
+  };
 }

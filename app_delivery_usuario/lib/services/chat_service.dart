@@ -11,14 +11,14 @@ class ChatService {
       _db.collection('chats').doc(orderId).collection('messages');
 
   /// Live stream of all messages for an order, oldest first.
-  static Stream<List<ChatMessage>> streamMessages(String orderId) => _messages(
-        orderId,
-      )
+  static Stream<List<ChatMessage>> streamMessages(String orderId) =>
+      _messages(orderId)
           .orderBy('timestamp')
           .snapshots()
-          .map((s) => s.docs
-              .map((d) => ChatMessage.fromMap(d.id, d.data()))
-              .toList());
+          .map(
+            (s) =>
+                s.docs.map((d) => ChatMessage.fromMap(d.id, d.data())).toList(),
+          );
 
   static Future<void> sendMessage({
     required String orderId,

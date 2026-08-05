@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import '../services/db_service.dart';
+import '../models/order_model.dart';
 
 class RatingScreen extends StatefulWidget {
   const RatingScreen({super.key});
@@ -13,16 +14,58 @@ class RatingScreen extends StatefulWidget {
 class _RatingScreenState extends State<RatingScreen> {
   int _storeRating = 5;
   int _driverRating = 4;
+  final _commentCtrl = TextEditingController();
+  String? _orderId;
+  OrderModel? _order;
+  bool _submitting = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final id = ModalRoute.of(context)?.settings.arguments as String?;
+    if (id != null && id != _orderId) {
+      _orderId = id;
+      _loadOrder(id);
+    }
+  }
+
+  Future<void> _loadOrder(String id) async {
+    try {
+      final order = await DbService.getOrder(id);
+      if (mounted) setState(() => _order = order);
+    } catch (_) {
+      // The rating remains usable with generic labels if this read fails.
+    }
+  }
+
+  @override
+  void dispose() {
+    _commentCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _submit() async {
-    // The order id is passed as the route argument (from order_detail_screen).
-    // When present we flag the order as rated so it won't be offered again.
-    final orderId = ModalRoute.of(context)?.settings.arguments as String?;
+    if (_submitting) return;
+    final orderId = _orderId;
     if (orderId != null && orderId.isNotEmpty) {
+      setState(() => _submitting = true);
       try {
-        await DbService.markOrderRated(orderId);
+        await DbService.markOrderRated(
+          orderId,
+          storeRating: _storeRating,
+          courierRating: _driverRating,
+          comment: _commentCtrl.text.trim(),
+        );
       } catch (_) {
-        // Non-blocking: still let the user finish even if the write fails.
+        if (!mounted) return;
+        setState(() => _submitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No pudimos guardar tu calificación'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+        return;
       }
     }
     if (mounted) {
@@ -33,14 +76,14 @@ class _RatingScreenState extends State<RatingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: Stack(
         children: [
           Column(
             children: [
               SizedBox(height: MediaQuery.of(context).padding.top + 8),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 0),
                 child: Align(
                   alignment: Alignment.centerRight,
                   child: GestureDetector(
@@ -49,10 +92,10 @@ class _RatingScreenState extends State<RatingScreen> {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: AppColors.bg,
+                        color: Theme.of(context).scaffoldBackgroundColor,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.close, size: 20),
+                      child: Icon(Icons.close, size: 20),
                     ),
                   ),
                 ),
@@ -63,7 +106,7 @@ class _RatingScreenState extends State<RatingScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         '¿Cómo estuvo\ntu pedido?',
                         style: TextStyle(
                           fontSize: 26,
@@ -73,18 +116,20 @@ class _RatingScreenState extends State<RatingScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'Tu opinión nos ayuda a mejorar.',
                         style: TextStyle(
-                            fontSize: 14, color: AppColors.textMuted),
+                          fontSize: 14,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
-                      const SizedBox(height: 28),
+                      SizedBox(height: 28),
                       // Store card
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(20),
+                        padding: EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: AppColors.bg,
+                          color: Theme.of(context).scaffoldBackgroundColor,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Column(
@@ -96,26 +141,34 @@ class _RatingScreenState extends State<RatingScreen> {
                               radius: 14,
                             ),
                             const SizedBox(height: 10),
-                            const Text('El Norky\'s',
-                                style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700)),
+                            Text(
+                              _order?.storeName ?? 'Comercio',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                             const SizedBox(height: 2),
-                            const Text('Comida y presentación',
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textMuted)),
+                            Text(
+                              'Comida y presentación',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
                             const SizedBox(height: 14),
                             Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.center,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: List.generate(5, (i) {
                                 return GestureDetector(
                                   onTap: () =>
                                       setState(() => _storeRating = i + 1),
                                   child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 4),
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                    ),
                                     child: Icon(
                                       i < _storeRating
                                           ? Icons.star_rounded
@@ -123,7 +176,9 @@ class _RatingScreenState extends State<RatingScreen> {
                                       size: 38,
                                       color: i < _storeRating
                                           ? AppColors.star
-                                          : AppColors.border,
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.outlineVariant,
                                     ),
                                   ),
                                 );
@@ -132,13 +187,13 @@ class _RatingScreenState extends State<RatingScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 14),
+                      SizedBox(height: 14),
                       // Driver card
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(20),
+                        padding: EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: AppColors.bg,
+                          color: Theme.of(context).scaffoldBackgroundColor,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Column(
@@ -148,11 +203,13 @@ class _RatingScreenState extends State<RatingScreen> {
                               height: 56,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(14),
-                                color: const Color(0xFFFFD0B0),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.primaryContainer,
                               ),
-                              child: const Center(
+                              child: Center(
                                 child: Text(
-                                  'JR',
+                                  _courierInitials,
                                   style: TextStyle(
                                     fontWeight: FontWeight.w800,
                                     color: AppColors.primary,
@@ -162,26 +219,34 @@ class _RatingScreenState extends State<RatingScreen> {
                               ),
                             ),
                             const SizedBox(height: 10),
-                            const Text('Julio Ramírez',
-                                style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700)),
+                            Text(
+                              _order?.courierName ?? 'Tu repartidor',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                             const SizedBox(height: 2),
-                            const Text('Tu repartidor',
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textMuted)),
+                            Text(
+                              'Tu repartidor',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
                             const SizedBox(height: 14),
                             Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.center,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: List.generate(5, (i) {
                                 return GestureDetector(
                                   onTap: () =>
                                       setState(() => _driverRating = i + 1),
                                   child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 4),
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                    ),
                                     child: Icon(
                                       i < _driverRating
                                           ? Icons.star_rounded
@@ -189,7 +254,9 @@ class _RatingScreenState extends State<RatingScreen> {
                                       size: 38,
                                       color: i < _driverRating
                                           ? AppColors.star
-                                          : AppColors.border,
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.outlineVariant,
                                     ),
                                   ),
                                 );
@@ -200,18 +267,14 @@ class _RatingScreenState extends State<RatingScreen> {
                       ),
                       const SizedBox(height: 14),
                       // Comment
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(14),
-                        constraints: const BoxConstraints(minHeight: 80),
-                        decoration: BoxDecoration(
-                          color: AppColors.bg,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const Text(
-                          'Cuéntanos más (opcional)…',
-                          style: TextStyle(
-                              fontSize: 13, color: AppColors.textSubtle),
+                      TextField(
+                        controller: _commentCtrl,
+                        maxLines: 3,
+                        maxLength: 300,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                          hintText: 'Cuéntanos más (opcional)',
+                          alignLabelWithHint: true,
                         ),
                       ),
                     ],
@@ -226,16 +289,28 @@ class _RatingScreenState extends State<RatingScreen> {
             right: 0,
             child: Container(
               padding: EdgeInsets.fromLTRB(
-                  20, 16, 20, 16 + MediaQuery.of(context).padding.bottom),
-              color: Colors.white,
+                20,
+                16,
+                20,
+                16 + MediaQuery.of(context).padding.bottom,
+              ),
+              color: Theme.of(context).colorScheme.surface,
               child: AppButton(
                 label: 'Enviar calificación',
                 onTap: _submit,
+                isLoading: _submitting,
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  String get _courierInitials {
+    final name = _order?.courierName?.trim();
+    if (name == null || name.isEmpty) return 'R';
+    final words = name.split(RegExp(r'\s+')).where((word) => word.isNotEmpty);
+    return words.take(2).map((word) => word[0].toUpperCase()).join();
   }
 }

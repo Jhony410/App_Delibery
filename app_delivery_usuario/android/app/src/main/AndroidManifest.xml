@@ -5,7 +5,7 @@
     <!-- Biometría: acceso rápido con huella / Face ID (local_auth). -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <application
-        android:label="app_delivery_usuario"
+        android:label="DeliPuno"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <!-- Google Maps SDK: la clave vive solo aquí (y en web/index.html),

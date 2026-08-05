@@ -3,6 +3,7 @@ import '../theme.dart';
 import '../widgets.dart';
 import '../models/order_model.dart';
 import '../services/cart_service.dart';
+import '../cart_checkout_sheet.dart';
 
 /// Detail view for a finished order (opened from "Mis pedidos" when the order
 /// is no longer active). Shows the line items, price breakdown, delivery
@@ -17,15 +18,19 @@ class OrderDetailScreen extends StatelessWidget {
 
     if (order == null) {
       return Scaffold(
-        backgroundColor: AppColors.bg,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: SafeArea(
           child: Column(
             children: [
               _appBar(context),
-              const Expanded(
+              Expanded(
                 child: Center(
-                  child: Text('Pedido no encontrado',
-                      style: TextStyle(color: AppColors.textMuted)),
+                  child: Text(
+                    'Pedido no encontrado',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -37,7 +42,7 @@ class OrderDetailScreen extends StatelessWidget {
     final canRate = order.status == 'entregado' && !order.rated;
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Column(
         children: [
           SizedBox(height: top + 8),
@@ -49,38 +54,56 @@ class OrderDetailScreen extends StatelessWidget {
                 _storeHeader(order),
                 const SizedBox(height: 16),
                 _sectionCard(
+                  context,
                   title: 'Productos',
                   child: Column(
                     children: [
-                      for (final it in order.items) _itemRow(it),
+                      for (final it in order.items) _itemRow(context, it),
                     ],
                   ),
                 ),
                 const SizedBox(height: 14),
                 _sectionCard(
+                  context,
                   title: 'Resumen',
                   child: Column(
                     children: [
-                      _priceRow('Subtotal',
-                          'S/ ${order.subtotal.toStringAsFixed(2)}'),
+                      _priceRow(
+                        context,
+                        'Subtotal',
+                        'S/ ${order.subtotal.toStringAsFixed(2)}',
+                      ),
                       const SizedBox(height: 8),
-                      _priceRow('Envío',
-                          'S/ ${order.deliveryFee.toStringAsFixed(2)}'),
-                      const Padding(
+                      _priceRow(
+                        context,
+                        'Envío',
+                        'S/ ${order.deliveryFee.toStringAsFixed(2)}',
+                      ),
+                      Padding(
                         padding: EdgeInsets.symmetric(vertical: 10),
-                        child: Divider(color: AppColors.border, height: 1),
+                        child: Divider(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                          height: 1,
+                        ),
                       ),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Total',
-                              style: TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.w800)),
-                          Text('S/ ${order.total.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.primary)),
+                          Text(
+                            'Total',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            'S/ ${order.total.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -88,15 +111,22 @@ class OrderDetailScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 _sectionCard(
+                  context,
                   title: 'Entrega',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _infoRow(Icons.location_on_outlined,
-                          order.address.isEmpty ? '—' : order.address),
+                      _infoRow(
+                        context,
+                        Icons.location_on_outlined,
+                        order.address.isEmpty ? '—' : order.address,
+                      ),
                       const SizedBox(height: 10),
-                      _infoRow(Icons.calendar_today_outlined,
-                          _formatDate(order.createdAt)),
+                      _infoRow(
+                        context,
+                        Icons.calendar_today_outlined,
+                        _formatDate(order.createdAt),
+                      ),
                     ],
                   ),
                 ),
@@ -110,8 +140,11 @@ class OrderDetailScreen extends StatelessWidget {
                   AppButton(
                     label: 'Calificar',
                     variant: 'ghost',
-                    onTap: () => Navigator.pushNamed(context, '/rating',
-                        arguments: order.id),
+                    onTap: () => Navigator.pushNamed(
+                      context,
+                      '/rating',
+                      arguments: order.id,
+                    ),
                   ),
                 ],
               ],
@@ -146,49 +179,58 @@ class OrderDetailScreen extends StatelessWidget {
       fee: order.deliveryFee,
     );
     for (final it in order.items) {
-      CartService.addOrIncrement(CartEntry(
-        productId: it.productId,
-        name: it.name,
-        note: it.note,
-        tone: order.storeTone,
-        unitPrice: it.price,
-        qty: it.qty,
-        storeId: order.storeId,
-        storeName: order.storeName,
-        storeTone: order.storeTone,
-        deliveryTime: null,
-        deliveryFee: order.deliveryFee,
-      ));
+      CartService.addOrIncrement(
+        CartEntry(
+          productId: it.productId,
+          name: it.name,
+          note: it.note,
+          tone: order.storeTone,
+          unitPrice: it.price,
+          qty: it.qty,
+          storeId: order.storeId,
+          storeName: order.storeName,
+          storeTone: order.storeTone,
+          deliveryTime: null,
+          deliveryFee: order.deliveryFee,
+        ),
+      );
     }
-    Navigator.pushNamed(context, '/cart');
+    await showCartCheckoutSheet(context);
   }
 
   Widget _storeHeader(OrderModel order) {
     return Row(
       children: [
         ImgPlaceholder(
-            height: 56, width: 56, tone: order.storeTone, radius: 12),
+          height: 56,
+          width: 56,
+          tone: order.storeTone,
+          radius: 12,
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(order.storeName,
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w800)),
+              Text(
+                order.storeName,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
               const SizedBox(height: 4),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: _statusColor(order.status).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Text(order.statusLabel,
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: _statusColor(order.status))),
+                child: Text(
+                  order.statusLabel,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: _statusColor(order.status),
+                  ),
+                ),
               ),
             ],
           ),
@@ -197,23 +239,30 @@ class OrderDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _sectionCard({required String title, required Widget child}) {
+  Widget _sectionCard(
+    BuildContext context, {
+    required String title,
+    required Widget child,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textMuted,
-                  letterSpacing: 0.04)),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              letterSpacing: 0.04,
+            ),
+          ),
           const SizedBox(height: 12),
           child,
         ],
@@ -221,74 +270,94 @@ class OrderDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _itemRow(OrderItem it) {
+  Widget _itemRow(BuildContext context, OrderItem it) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: AppColors.primaryTint,
+              color: Theme.of(context).colorScheme.primaryContainer,
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Text('${it.qty}×',
-                style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.primary)),
+            child: Text(
+              '${it.qty}×',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: AppColors.primary,
+              ),
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(it.name,
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w600)),
+                Text(
+                  it.name,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
                 if (it.note != null && it.note!.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(it.note!,
-                      style: const TextStyle(
-                          fontSize: 12, color: AppColors.textSubtle)),
+                  SizedBox(height: 2),
+                  Text(
+                    it.note!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
                 ],
               ],
             ),
           ),
           const SizedBox(width: 10),
-          Text('S/ ${(it.price * it.qty).toStringAsFixed(2)}',
-              style: const TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w700)),
+          Text(
+            'S/ ${(it.price * it.qty).toStringAsFixed(2)}',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
         ],
       ),
     );
   }
 
-  Widget _priceRow(String label, String value) {
+  Widget _priceRow(BuildContext context, String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label,
-            style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
-        Text(value,
-            style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textMuted,
-                fontWeight: FontWeight.w600)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 13,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _infoRow(IconData icon, String text) {
+  Widget _infoRow(BuildContext context, IconData icon, String text) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 18, color: AppColors.textMuted),
+        Icon(
+          icon,
+          size: 18,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
         const SizedBox(width: 10),
         Expanded(
-          child: Text(text,
-              style: const TextStyle(fontSize: 14, height: 1.35)),
+          child: Text(text, style: TextStyle(fontSize: 14, height: 1.35)),
         ),
       ],
     );
@@ -296,7 +365,7 @@ class OrderDetailScreen extends StatelessWidget {
 
   Widget _appBar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Row(
         children: [
           GestureDetector(
@@ -305,17 +374,21 @@ class OrderDetailScreen extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
               ),
-              child: const Icon(Icons.chevron_left, size: 22),
+              child: Icon(Icons.chevron_left, size: 22),
             ),
           ),
           const SizedBox(width: 12),
-          const Expanded(
-            child: Text('Detalle del pedido',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          Expanded(
+            child: Text(
+              'Detalle del pedido',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -330,8 +403,18 @@ class OrderDetailScreen extends StatelessWidget {
 
   String _formatDate(DateTime dt) {
     const months = [
-      'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-      'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
+      'ene',
+      'feb',
+      'mar',
+      'abr',
+      'may',
+      'jun',
+      'jul',
+      'ago',
+      'sep',
+      'oct',
+      'nov',
+      'dic',
     ];
     final h = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
     final ampm = dt.hour >= 12 ? 'PM' : 'AM';

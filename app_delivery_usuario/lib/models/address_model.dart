@@ -20,7 +20,8 @@ class AddressModel {
     this.longitude,
   });
 
-  factory AddressModel.fromMap(String id, Map<String, dynamic> m) => AddressModel(
+  factory AddressModel.fromMap(String id, Map<String, dynamic> m) =>
+      AddressModel(
         id: id,
         label: m['label'] ?? '',
         street: m['street'] ?? '',
@@ -31,13 +32,13 @@ class AddressModel {
       );
 
   Map<String, dynamic> toMap() => {
-        'label': label,
-        'street': street,
-        'reference': reference,
-        'isDefault': isDefault,
-        'latitude': latitude,
-        'longitude': longitude,
-      };
+    'label': label,
+    'street': street,
+    'reference': reference,
+    'isDefault': isDefault,
+    'latitude': latitude,
+    'longitude': longitude,
+  };
 
   bool get hasCoords => latitude != null && longitude != null;
 }

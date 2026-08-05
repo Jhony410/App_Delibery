@@ -1,8 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../theme.dart';
-import '../widgets.dart';
+
 import '../services/auth_service.dart';
 import '../services/biometric_auth_service.dart';
+import '../theme.dart';
+import '../widgets.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,202 +14,297 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
-  final _pass = TextEditingController();
-  bool _loading = false;
+  final _password = TextEditingController();
+  bool _emailLoading = false;
+  bool _googleLoading = false;
+  bool _biometricLoading = false;
+  bool _biometricReady = false;
   bool _obscure = true;
 
-  /// Solo se muestra el botón de huella si el dispositivo la soporta Y el
-  /// usuario ya activó la opción antes desde su perfil.
-  bool _biometricReady = false;
+  bool get _busy => _emailLoading || _googleLoading || _biometricLoading;
 
   @override
   void initState() {
     super.initState();
-    _checkBiometrics();
+    _loadBiometricAccess();
   }
 
   @override
   void dispose() {
     _email.dispose();
-    _pass.dispose();
+    _password.dispose();
     super.dispose();
   }
 
-  Future<void> _checkBiometrics() async {
+  Future<void> _loadBiometricAccess() async {
+    final available = await BiometricAuthService.isBiometricAvailable();
+    final saved = await BiometricAuthService.hasSavedLogin();
+    final uid = AuthService.currentUid;
+    final activeProtected =
+        uid != null && await BiometricAuthService.hasAccessForUser(uid);
+    if (mounted) {
+      setState(() => _biometricReady = available && (saved || activeProtected));
+    }
+  }
+
+  Future<void> _signInWithEmail() async {
+    if (_busy || !(_formKey.currentState?.validate() ?? false)) return;
+    setState(() => _emailLoading = true);
     try {
-      final available = await BiometricAuthService.isBiometricAvailable();
-      final saved = await BiometricAuthService.hasSavedCredentials();
-      if (mounted) setState(() => _biometricReady = available && saved);
+      await AuthService.signInWithEmail(_email.text.trim(), _password.text);
+      if (mounted) _openHome();
+    } on FirebaseAuthException catch (error) {
+      _showError(_firebaseMessage(error.code));
+    } on AuthFlowException catch (error) {
+      _showError(error.message);
     } catch (_) {
-      // Sin biometría el formulario tradicional sigue intacto: no hay nada que
-      // informarle al usuario.
+      _showError('No pudimos iniciar sesión. Inténtalo nuevamente.');
+    } finally {
+      if (mounted) setState(() => _emailLoading = false);
+    }
+  }
+
+  Future<void> _continueWithGoogle() async {
+    if (_busy) return;
+    setState(() => _googleLoading = true);
+    try {
+      final profile = await AuthService.signInWithGoogle();
+      if (!mounted || profile == null) return;
+      _openHome();
+    } on AuthFlowException catch (error) {
+      _showError(error.message);
+    } catch (_) {
+      _showError('No pudimos iniciar sesión con Google. Inténtalo nuevamente.');
+    } finally {
+      if (mounted) setState(() => _googleLoading = false);
     }
   }
 
   Future<void> _signInWithBiometrics() async {
-    if (_loading) return;
-    setState(() => _loading = true);
+    if (_busy || !_biometricReady) return;
+    setState(() => _biometricLoading = true);
     try {
-      final result = await BiometricAuthService.signInWithBiometrics();
-      if (!mounted) return;
-      if (result.isSuccess) {
-        Navigator.pushReplacementNamed(context, '/home');
+      final uid = AuthService.currentUid;
+      if (uid != null && await BiometricAuthService.hasAccessForUser(uid)) {
+        final authenticated = await BiometricAuthService.authenticate();
+        if (!mounted) return;
+        if (authenticated) _openHome();
         return;
       }
-      // Cancelar no es un error: el usuario simplemente vuelve al formulario.
-      if (result.canceled) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(result.error ?? 'No pudimos ingresar con tu huella'),
-        backgroundColor: AppColors.danger,
-      ));
-      // Si las credenciales se borraron por estar obsoletas, el botón debe
-      // desaparecer hasta que el usuario vuelva a activarlo desde su perfil.
-      await _checkBiometrics();
+
+      final result = await BiometricAuthService.signInWithBiometrics();
+      if (!mounted) return;
+      if (result.success) {
+        _openHome();
+        return;
+      }
+      if (!result.canceled) {
+        _showError(result.error ?? 'No pudimos ingresar con tu huella.');
+        await _loadBiometricAccess();
+      }
+    } on BiometricUnavailableException catch (error) {
+      _showError(error.message);
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('No pudimos ingresar con tu huella'),
-          backgroundColor: AppColors.danger,
-        ));
-      }
+      _showError('No pudimos ingresar con tu huella.');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _biometricLoading = false);
     }
   }
 
-  Future<void> _signIn() async {
-    if (_email.text.trim().isEmpty || _pass.text.isEmpty) return;
-    setState(() => _loading = true);
+  Future<void> _resetPassword() async {
+    final email = _email.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      _showError('Ingresa tu correo para recuperar la contraseña.');
+      return;
+    }
     try {
-      await AuthService.signIn(_email.text.trim(), _pass.text);
-      if (mounted) Navigator.pushReplacementNamed(context, '/home');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(_friendlyError(e.toString())),
-          backgroundColor: AppColors.danger,
-        ));
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      await AuthService.sendPasswordReset(email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Te enviamos un enlace de recuperación.')),
+      );
+    } on FirebaseAuthException catch (error) {
+      _showError(_firebaseMessage(error.code));
+    } catch (_) {
+      _showError('No pudimos enviar el enlace de recuperación.');
     }
   }
 
-  String _friendlyError(String e) {
-    if (e.contains('invalid-credential') ||
-        e.contains('user-not-found') ||
-        e.contains('wrong-password')) {
-      return 'Correo o contraseña incorrectos';
-    }
-    if (e.contains('network')) return 'Sin conexión a internet';
-    return 'Ocurrió un error, inténtalo de nuevo';
+  String _firebaseMessage(String code) => switch (code) {
+    'invalid-credential' ||
+    'wrong-password' ||
+    'user-not-found' => 'Correo o contraseña incorrectos.',
+    'invalid-email' => 'El correo no es válido.',
+    'user-disabled' => 'Esta cuenta fue deshabilitada.',
+    'network-request-failed' => 'Sin conexión a internet.',
+    'too-many-requests' => 'Demasiados intentos. Espera unos minutos.',
+    _ => 'No pudimos iniciar sesión. Inténtalo nuevamente.',
+  };
+
+  void _openHome() {
+    Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: context.colors.error),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Scaffold(
-      backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              DeliPunoWordmark(size: 40),
-              const SizedBox(height: 32),
-              const Text(
-                'Bienvenida\nde vuelta',
-                style: TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.9,
-                  height: 1.1,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Ingresa para pedir en minutos.',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 15),
-              ),
-              const SizedBox(height: 32),
-              AppTextField(
-                icon: Icons.mail_outline,
-                placeholder: 'Correo electrónico',
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 12),
-              AppTextField(
-                icon: Icons.lock_outline,
-                placeholder: 'Contraseña',
-                obscure: _obscure,
-                controller: _pass,
-                trailing: GestureDetector(
-                  onTap: () => setState(() => _obscure = !_obscure),
-                  child: Icon(
-                    _obscure
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
-                    size: 20,
-                    color: AppColors.textMuted,
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 26),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [AppColors.primaryDark, AppColors.secondary],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
                 ),
-              ),
-              const SizedBox(height: 14),
-              Align(
-                alignment: Alignment.centerRight,
-                child: GestureDetector(
-                  onTap: () async {
-                    if (_email.text.trim().isEmpty) return;
-                    final messenger = ScaffoldMessenger.of(context);
-                    await AuthService.sendPasswordReset(_email.text.trim());
-                    messenger.showSnackBar(const SnackBar(
-                      content: Text('Correo de recuperación enviado'),
-                    ));
-                  },
-                  child: const Text(
-                    '¿Olvidaste tu contraseña?',
-                    style: TextStyle(
-                        fontSize: 13,
+                child: Column(
+                  children: [
+                    const DeliPunoLogo(size: 88),
+                    const SizedBox(height: 12),
+                    const DeliPunoWordmark(color: Colors.white, size: 38),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Delivery para todo Puno',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.9),
                         fontWeight: FontWeight.w600,
-                        color: AppColors.primary),
-                  ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 28),
-              _loading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: AppColors.primary))
-                  : AppButton(label: 'Ingresar', onTap: _signIn),
-              if (_biometricReady && !_loading) ...[
-                const SizedBox(height: 12),
-                AppButton(
-                  label: 'Ingresar con huella',
-                  variant: 'ghost',
-                  onTap: _signInWithBiometrics,
-                  leading: const Icon(Icons.fingerprint,
-                      size: 22, color: AppColors.primary),
-                ),
-              ],
-              const SizedBox(height: 28),
-              Center(
-                child: GestureDetector(
-                  onTap: () => Navigator.pushNamed(context, '/register'),
-                  child: RichText(
-                    text: const TextSpan(
-                      style:
-                          TextStyle(fontSize: 14, color: AppColors.textMuted),
-                      children: [
-                        TextSpan(text: '¿Nuevo aquí? '),
-                        TextSpan(
-                          text: 'Crea una cuenta',
-                          style: TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w700),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 26, 24, 30),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Bienvenido',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Pide fácil en DeliPuno',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: colors.onSurface,
+                            ),
+                      ),
+                      const SizedBox(height: 22),
+                      _GoogleButton(
+                        loading: _googleLoading,
+                        enabled: !_busy,
+                        onPressed: _continueWithGoogle,
+                      ),
+                      const SizedBox(height: 22),
+                      _DividerLabel(label: 'o ingresa con tu cuenta'),
+                      const SizedBox(height: 18),
+                      AppTextField(
+                        icon: Icons.mail_outline_rounded,
+                        placeholder: 'Correo electrónico',
+                        controller: _email,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        autofillHints: const [AutofillHints.email],
+                        validator: (value) {
+                          final email = value?.trim() ?? '';
+                          if (email.isEmpty || !email.contains('@')) {
+                            return 'Ingresa un correo válido';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      AppTextField(
+                        icon: Icons.lock_outline_rounded,
+                        placeholder: 'Contraseña',
+                        controller: _password,
+                        obscure: _obscure,
+                        textInputAction: TextInputAction.done,
+                        autofillHints: const [AutofillHints.password],
+                        onSubmitted: (_) => _signInWithEmail(),
+                        validator: (value) => (value?.isEmpty ?? true)
+                            ? 'Ingresa tu contraseña'
+                            : null,
+                        trailing: IconButton(
+                          tooltip: _obscure
+                              ? 'Mostrar contraseña'
+                              : 'Ocultar contraseña',
+                          onPressed: () => setState(() => _obscure = !_obscure),
+                          icon: Icon(
+                            _obscure
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: _busy ? null : _resetPassword,
+                          child: const Text('¿Olvidaste tu contraseña?'),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      AppButton(
+                        label: 'Ingresar',
+                        onTap: _busy ? null : _signInWithEmail,
+                        isLoading: _emailLoading,
+                      ),
+                      if (_biometricReady) ...[
+                        const SizedBox(height: 10),
+                        AppButton(
+                          label: 'Ingresar con huella',
+                          variant: 'ghost',
+                          onTap: _busy ? null : _signInWithBiometrics,
+                          isLoading: _biometricLoading,
+                          leading: Icon(
+                            Icons.fingerprint_rounded,
+                            color: colors.primary,
+                          ),
                         ),
                       ],
-                    ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '¿No tienes una cuenta?',
+                              style: TextStyle(color: colors.onSurfaceVariant),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _busy
+                                ? null
+                                : () =>
+                                      Navigator.pushNamed(context, '/register'),
+                            child: const Text('Regístrate'),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -215,6 +312,86 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _GoogleButton extends StatelessWidget {
+  final bool loading;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  const _GoogleButton({
+    required this.loading,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return OutlinedButton(
+      onPressed: enabled ? onPressed : null,
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(56),
+        backgroundColor: colors.surface,
+        foregroundColor: colors.onSurface,
+        side: BorderSide(color: colors.outlineVariant),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+      ),
+      child: loading
+          ? SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: colors.primary,
+              ),
+            )
+          : Row(
+              children: [
+                Image.asset('assets/icon/google_g.png', width: 22, height: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Continuar con Google',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: colors.onSurface,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 34),
+              ],
+            ),
+    );
+  }
+}
+
+class _DividerLabel extends StatelessWidget {
+  final String label;
+  const _DividerLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(child: Divider()),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: context.colors.onSurfaceVariant,
+            ),
+          ),
+        ),
+        const Expanded(child: Divider()),
+      ],
     );
   }
 }

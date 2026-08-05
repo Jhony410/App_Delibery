@@ -14,24 +14,48 @@ class FavoritesScreen extends StatelessWidget {
     final uid = AuthService.currentUid;
     final top = MediaQuery.of(context).padding.top;
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Column(
         children: [
           SizedBox(height: top + 8),
           _buildAppBar(context),
           Expanded(
             child: uid == null
-                ? const _EmptyState()
+                ? const AppStateView(
+                    icon: Icons.login_rounded,
+                    title: 'Inicia sesión para ver tus favoritos',
+                  )
                 : StreamBuilder<List<FavoriteModel>>(
                     stream: DbService.streamUserFavorites(uid),
                     builder: (context, snap) {
                       if (snap.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                            child: CircularProgressIndicator(
-                                color: AppColors.primary));
+                        return Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Column(
+                            children: [
+                              AppSkeleton(height: 78),
+                              SizedBox(height: 10),
+                              AppSkeleton(height: 78),
+                            ],
+                          ),
+                        );
+                      }
+                      if (snap.hasError) {
+                        return const AppStateView(
+                          icon: Icons.cloud_off_rounded,
+                          title: 'No pudimos cargar tus favoritos',
+                          message: 'Revisa tu conexión e inténtalo nuevamente.',
+                        );
                       }
                       final favs = snap.data ?? [];
-                      if (favs.isEmpty) return const _EmptyState();
+                      if (favs.isEmpty) {
+                        return const AppStateView(
+                          icon: Icons.favorite_border_rounded,
+                          title: 'Aún no tienes favoritos',
+                          message:
+                              'Toca el corazón de un comercio para guardarlo.',
+                        );
+                      }
                       return ListView.separated(
                         padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
                         itemCount: favs.length,
@@ -50,7 +74,7 @@ class FavoritesScreen extends StatelessWidget {
 
   Widget _buildAppBar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Row(
         children: [
           GestureDetector(
@@ -59,16 +83,18 @@ class FavoritesScreen extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: AppColors.bg,
+                color: Theme.of(context).scaffoldBackgroundColor,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.chevron_left, size: 22),
+              child: Icon(Icons.chevron_left, size: 22),
             ),
           ),
           const SizedBox(width: 8),
-          const Expanded(
-            child: Text('Favoritos',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          Expanded(
+            child: Text(
+              'Favoritos',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -80,18 +106,18 @@ class FavoritesScreen extends StatelessWidget {
       onTap: () =>
           Navigator.pushNamed(context, '/store', arguments: fav.storeId),
       child: Container(
-        padding: const EdgeInsets.all(10),
+        padding: EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
         ),
         child: Row(
           children: [
             ImgPlaceholder(
-              label: fav.storeName.isEmpty
-                  ? ''
-                  : fav.storeName.split(' ')[0],
+              label: fav.storeName.isEmpty ? '' : fav.storeName.split(' ')[0],
               height: 56,
               width: 56,
               radius: 10,
@@ -101,63 +127,41 @@ class FavoritesScreen extends StatelessWidget {
             Expanded(
               child: Text(
                 fav.storeName.isEmpty ? 'Comercio' : fav.storeName,
-                style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w700),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
               ),
             ),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () async {
+            IconButton(
+              tooltip: 'Quitar de favoritos',
+              onPressed: () async {
                 try {
                   await DbService.toggleFavorite(
-                      uid, fav.storeId, fav.storeName);
+                    uid,
+                    fav.storeId,
+                    fav.storeName,
+                  );
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text('${fav.storeName} quitado de favoritos'),
-                      duration: const Duration(seconds: 1),
-                    ));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${fav.storeName} quitado de favoritos'),
+                        duration: const Duration(seconds: 1),
+                      ),
+                    );
                   }
                 } catch (e) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('No se pudo quitar de favoritos'),
-                      backgroundColor: AppColors.danger,
-                    ));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('No se pudo quitar de favoritos'),
+                        backgroundColor: AppColors.danger,
+                      ),
+                    );
                   }
                 }
               },
-              child: const Padding(
-                padding: EdgeInsets.all(6),
-                child: Icon(Icons.favorite, size: 20, color: AppColors.primary),
-              ),
+              icon: Icon(Icons.favorite, size: 20, color: AppColors.primary),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.favorite_border, size: 64, color: AppColors.border),
-          SizedBox(height: 16),
-          Text('Sin favoritos aún',
-              style: TextStyle(
-                  fontSize: 16,
-                  color: AppColors.textMuted,
-                  fontWeight: FontWeight.w600)),
-          SizedBox(height: 6),
-          Text('Toca el corazón de un comercio para guardarlo',
-              style: TextStyle(fontSize: 13, color: AppColors.textSubtle)),
-        ],
       ),
     );
   }

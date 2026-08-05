@@ -64,7 +64,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '415943093114',
     projectId: 'delypuno-ddd2d',
     storageBucket: 'delypuno-ddd2d.firebasestorage.app',
-    iosClientId: '415943093114-hsdjqncbl5nne5tpl4k8ujv64pei87e4.apps.googleusercontent.com',
+    iosClientId:
+        '415943093114-hsdjqncbl5nne5tpl4k8ujv64pei87e4.apps.googleusercontent.com',
     iosBundleId: 'com.example.appDelibery',
   );
 
@@ -74,7 +75,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '415943093114',
     projectId: 'delypuno-ddd2d',
     storageBucket: 'delypuno-ddd2d.firebasestorage.app',
-    iosClientId: '415943093114-hsdjqncbl5nne5tpl4k8ujv64pei87e4.apps.googleusercontent.com',
+    iosClientId:
+        '415943093114-hsdjqncbl5nne5tpl4k8ujv64pei87e4.apps.googleusercontent.com',
     iosBundleId: 'com.example.appDelibery',
   );
 

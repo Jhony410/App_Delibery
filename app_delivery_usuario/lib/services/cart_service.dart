@@ -1,3 +1,6 @@
+import 'package:flutter/foundation.dart';
+
+import '../delivery_config.dart';
 import '../models/order_model.dart';
 
 /// A single line in the cart. Each entry carries its own store data, so the
@@ -7,6 +10,7 @@ class CartEntry {
   final String name;
   final String? note;
   final String tone;
+  final String? imageUrl;
   final double unitPrice;
   int qty;
 
@@ -24,6 +28,7 @@ class CartEntry {
     required this.name,
     this.note,
     required this.tone,
+    this.imageUrl,
     required this.unitPrice,
     this.qty = 1,
     required this.storeId,
@@ -71,6 +76,9 @@ class CartGroup {
 /// below describe only the store currently being browsed; they are stamped onto
 /// each new [CartEntry] and used by the store/product screens for context.
 class CartService {
+  /// Emits after every cart mutation so all cart entry points stay synchronized.
+  static final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
   // ── Current browsing context (the store screen the user is looking at) ──
   static String? storeId;
   static String? storeName;
@@ -81,7 +89,8 @@ class CartService {
   // ── Cart contents (across all stores) ──
   static final List<CartEntry> items = [];
 
-  static String selectedAddress = 'Av. Arequipa 2450, Lince';
+  static String selectedAddress = '';
+  static String? selectedAddressLabel;
   static String? selectedAddressRef;
   // Coordinates of the delivery address the customer picked at checkout. Stamped
   // in cart_screen from the chosen AddressModel so they survive into the order.
@@ -103,18 +112,26 @@ class CartService {
     storeName = name;
     storeTone = tone;
     deliveryTime = time;
-    currentDeliveryFee = fee;
+    currentDeliveryFee = DeliveryConfig.fixedFee;
   }
 
   static void addOrIncrement(CartEntry entry) {
-    // Same product from the same store merges; otherwise it's a new line.
+    // Only identical configurations merge. Different size/extras are encoded
+    // in name, note and unit price and must remain separate cart lines.
     final idx = items.indexWhere(
-        (e) => e.productId == entry.productId && e.storeId == entry.storeId);
+      (e) =>
+          e.productId == entry.productId &&
+          e.storeId == entry.storeId &&
+          e.name == entry.name &&
+          e.note == entry.note &&
+          e.unitPrice == entry.unitPrice,
+    );
     if (idx >= 0) {
       items[idx].qty += entry.qty;
     } else {
       items.add(entry);
     }
+    _notify();
   }
 
   // ── Single-store enforcement ──────────────────────────────────────────────
@@ -147,7 +164,10 @@ class CartService {
   static bool canAddFromStore(String storeId) =>
       items.isEmpty || cartStoreId == storeId;
 
-  static void incrementEntry(CartEntry entry) => entry.qty++;
+  static void incrementEntry(CartEntry entry) {
+    entry.qty++;
+    _notify();
+  }
 
   static void decrementEntry(CartEntry entry) {
     if (entry.qty > 1) {
@@ -155,6 +175,27 @@ class CartService {
     } else {
       items.remove(entry);
     }
+    _notify();
+  }
+
+  static void removeEntry(CartEntry entry) {
+    items.remove(entry);
+    _notify();
+  }
+
+  static void setDeliveryAddress({
+    required String street,
+    String? label,
+    String? reference,
+    double? latitude,
+    double? longitude,
+  }) {
+    selectedAddress = street;
+    selectedAddressLabel = label;
+    selectedAddressRef = reference;
+    selectedAddressLat = latitude;
+    selectedAddressLng = longitude;
+    _notify();
   }
 
   static void clear() {
@@ -167,7 +208,10 @@ class CartService {
     currentDeliveryFee = 0;
     selectedAddressLat = null;
     selectedAddressLng = null;
+    _notify();
   }
+
+  static void _notify() => revision.value++;
 
   /// Cart items grouped by store, preserving first-seen order.
   static List<CartGroup> get groups {
@@ -180,7 +224,7 @@ class CartService {
           storeName: e.storeName,
           storeTone: e.storeTone,
           deliveryTime: e.deliveryTime,
-          deliveryFee: e.deliveryFee,
+          deliveryFee: DeliveryConfig.fixedFee,
           items: [],
         ),
       );
@@ -192,25 +236,20 @@ class CartService {
   static int get itemCount => items.fold(0, (s, e) => s + e.qty);
   static double get subtotal => items.fold(0.0, (s, e) => s + e.lineTotal);
 
-  /// Grand delivery fee: each distinct store in the cart contributes its fee once.
-  static double get deliveryFee {
-    final seen = <String>{};
-    double sum = 0;
-    for (final e in items) {
-      if (seen.add(e.storeId)) sum += e.deliveryFee;
-    }
-    return sum;
-  }
+  /// One fixed delivery fee per order. Empty carts do not display a fee.
+  static double get deliveryFee => items.isEmpty ? 0 : DeliveryConfig.fixedFee;
 
   static double get total => subtotal + deliveryFee;
 
   static List<OrderItem> toOrderItems() => items
-      .map((e) => OrderItem(
-            productId: e.productId,
-            name: e.name,
-            qty: e.qty,
-            price: e.unitPrice,
-            note: e.note,
-          ))
+      .map(
+        (e) => OrderItem(
+          productId: e.productId,
+          name: e.name,
+          qty: e.qty,
+          price: e.unitPrice,
+          note: e.note,
+        ),
+      )
       .toList();
 }

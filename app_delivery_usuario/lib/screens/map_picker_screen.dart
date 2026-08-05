@@ -50,7 +50,8 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
   final Geocoding _geocoder = Geocoding();
   Timer? _debounce;
-  LatLng? _lastQueried; // último punto realmente consultado (para el filtro 25 m)
+  LatLng?
+  _lastQueried; // último punto realmente consultado (para el filtro 25 m)
 
   @override
   void didChangeDependencies() {
@@ -66,7 +67,9 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       _scheduleGeocode(immediate: true);
     } else {
       // Sin punto inicial: centra en la ubicación actual.
-      WidgetsBinding.instance.addPostFrameCallback((_) => _goToCurrentLocation());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _goToCurrentLocation(),
+      );
     }
   }
 
@@ -90,13 +93,15 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
         return;
       }
       final pos = await Geolocator.getCurrentPosition(
-        locationSettings:
-            const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
       final target = LatLng(pos.latitude, pos.longitude);
       _cameraTarget = target;
       await _mapController?.animateCamera(
-          CameraUpdate.newLatLngZoom(target, _defaultZoom));
+        CameraUpdate.newLatLngZoom(target, _defaultZoom),
+      );
       // El onCameraIdle posterior al animate disparará el geocoding.
     } catch (_) {
       // Silencioso: el usuario puede mover el mapa manualmente.
@@ -127,7 +132,11 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     final last = _lastQueried;
     if (last != null) {
       final meters = Geolocator.distanceBetween(
-          last.latitude, last.longitude, target.latitude, target.longitude);
+        last.latitude,
+        last.longitude,
+        target.latitude,
+        target.longitude,
+      );
       if (meters < 25) return;
     }
 
@@ -145,7 +154,9 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     setState(() => _geocoding = true);
     try {
       final placemarks = await _geocoder.placemarkFromCoordinates(
-          target.latitude, target.longitude);
+        target.latitude,
+        target.longitude,
+      );
       final text = placemarks.isEmpty
           ? 'Ubicación seleccionada'
           : _formatPlacemark(placemarks.first);
@@ -222,7 +233,8 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             onCameraIdle: _onCameraIdle,
             gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
               Factory<OneSequenceGestureRecognizer>(
-                  () => EagerGestureRecognizer()),
+                () => EagerGestureRecognizer(),
+              ),
             },
           ),
           // Pin fijo en el centro (el vértice inferior apunta al centro exacto).
@@ -230,8 +242,11 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             child: Center(
               child: Padding(
                 padding: EdgeInsets.only(bottom: 44),
-                child: Icon(Icons.location_on,
-                    size: 52, color: AppColors.primary),
+                child: Icon(
+                  Icons.location_on,
+                  size: 52,
+                  color: AppColors.primary,
+                ),
               ),
             ),
           ),
@@ -241,7 +256,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             left: 16,
             child: _CircleBtn(
               onTap: () => Navigator.pop(context),
-              child: const Icon(Icons.chevron_left, size: 22),
+              child: Icon(Icons.chevron_left, size: 22),
             ),
           ),
           // Botón "mi ubicación".
@@ -250,8 +265,11 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             bottom: 200,
             child: _CircleBtn(
               onTap: _goToCurrentLocation,
-              child: const Icon(Icons.my_location,
-                  size: 20, color: AppColors.primary),
+              child: Icon(
+                Icons.my_location,
+                size: 20,
+                color: AppColors.primary,
+              ),
             ),
           ),
           _buildBottomPanel(),
@@ -267,53 +285,65 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       bottom: 0,
       child: Container(
         padding: EdgeInsets.fromLTRB(
-            20, 18, 20, 18 + MediaQuery.of(context).padding.bottom),
-        decoration: const BoxDecoration(
-          color: Colors.white,
+          20,
+          18,
+          20,
+          18 + MediaQuery.of(context).padding.bottom,
+        ),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-          boxShadow: [
-            BoxShadow(color: Color(0x1A000000), blurRadius: 16),
-          ],
+          boxShadow: [BoxShadow(color: Color(0x1A000000), blurRadius: 16)],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Mueve el mapa para que el pin quede justo en tu puerta',
               style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textMuted,
-                  fontWeight: FontWeight.w600),
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 12),
             Row(
               children: [
-                const Icon(Icons.place, size: 20, color: AppColors.primary),
+                Icon(Icons.place, size: 20, color: AppColors.primary),
                 const SizedBox(width: 8),
                 Expanded(
                   child: _geocoding
                       ? Row(
-                          children: const [
+                          children: [
                             SizedBox(
                               width: 14,
                               height: 14,
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: AppColors.primary),
+                                strokeWidth: 2,
+                                color: AppColors.primary,
+                              ),
                             ),
                             SizedBox(width: 10),
-                            Text('Buscando dirección…',
-                                style: TextStyle(
-                                    fontSize: 14,
-                                    color: AppColors.textMuted)),
+                            Text(
+                              'Buscando dirección…',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
                           ],
                         )
                       : Text(
                           _street,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w700),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                 ),
               ],
@@ -334,21 +364,22 @@ class _CircleBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: const [
-              BoxShadow(
-                  color: Color(0x22000000),
-                  blurRadius: 8,
-                  offset: Offset(0, 2)),
-            ],
+    onTap: onTap,
+    child: Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x22000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
           ),
-          child: child,
-        ),
-      );
+        ],
+      ),
+      child: child,
+    ),
+  );
 }

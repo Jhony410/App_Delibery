@@ -22,23 +22,23 @@ class UserModel {
   });
 
   factory UserModel.fromMap(String uid, Map<String, dynamic> m) => UserModel(
-        uid: uid,
-        name: m['name'] ?? '',
-        email: m['email'] ?? '',
-        phone: m['phone'] ?? '',
-        memberSince: (m['memberSince'] as Timestamp).toDate(),
-        totalOrders: m['totalOrders'] ?? 0,
-        totalSpent: (m['totalSpent'] as num?)?.toDouble() ?? 0,
-        rating: (m['rating'] as num?)?.toDouble() ?? 5.0,
-      );
+    uid: uid,
+    name: m['name'] ?? '',
+    email: m['email'] ?? '',
+    phone: m['phone'] ?? '',
+    memberSince: (m['memberSince'] as Timestamp).toDate(),
+    totalOrders: m['totalOrders'] ?? 0,
+    totalSpent: (m['totalSpent'] as num?)?.toDouble() ?? 0,
+    rating: (m['rating'] as num?)?.toDouble() ?? 5.0,
+  );
 
   Map<String, dynamic> toMap() => {
-        'name': name,
-        'email': email,
-        'phone': phone,
-        'memberSince': Timestamp.fromDate(memberSince),
-        'totalOrders': totalOrders,
-        'totalSpent': totalSpent,
-        'rating': rating,
-      };
+    'name': name,
+    'email': email,
+    'phone': phone,
+    'memberSince': Timestamp.fromDate(memberSince),
+    'totalOrders': totalOrders,
+    'totalSpent': totalSpent,
+    'rating': rating,
+  };
 }

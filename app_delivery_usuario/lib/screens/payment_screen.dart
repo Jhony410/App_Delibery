@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets.dart';
-import '../models/order_model.dart';
-import '../models/store_model.dart';
-import '../services/db_service.dart';
-import '../services/auth_service.dart';
 import '../services/cart_service.dart';
+import '../services/checkout_service.dart';
 
 class PaymentScreen extends StatefulWidget {
   const PaymentScreen({super.key});
@@ -41,62 +38,37 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Future<void> _confirmOrder() async {
-    final uid = AuthService.currentUid;
-    if (uid == null || CartService.items.isEmpty) return;
+    if (_loading) return;
     setState(() => _loading = true);
     try {
-      // Store identity MUST come from the cart's items, not the browsing
-      // context (CartService.storeId/storeName/... get overwritten every time
-      // the user merely opens another store screen). Sourcing them from the
-      // items guarantees the order keeps the store the products belong to, and
-      // that id/name/tone/address are all coherent.
-      final storeId = CartService.cartStoreId ?? '';
-      // Pull that same store's real address so the courier app can show the
-      // pickup location. A read hiccup must not block checkout — fall back null.
-      StoreModel? store;
-      try {
-        store = await DbService.getStore(storeId);
-      } catch (_) {
-        store = null;
-      }
-      final order = OrderModel(
-        id: '',
-        userId: uid,
-        storeId: storeId,
-        storeName: CartService.cartStoreName ?? '',
-        storeTone: CartService.cartStoreTone ?? 'warm',
-        storeAddress: store?.address,
-        storePhone: store?.phone,
-        // Coordinates propagated to the order so the courier + tracking maps
-        // have real destinations. Any of these may be null (store/address
-        // without coordinates); the order is created regardless — never blocked.
-        storeLat: store?.latitude,
-        storeLng: store?.longitude,
-        deliveryLat: CartService.selectedAddressLat,
-        deliveryLng: CartService.selectedAddressLng,
-        items: CartService.toOrderItems(),
-        subtotal: CartService.subtotal,
-        deliveryFee: CartService.deliveryFee,
-        total: CartService.total,
-        status: 'confirmed',
-        address: CartService.selectedAddress,
+      final orderId = await CheckoutService.createOrder(
         paymentMethod: _methods[_selected].id,
         observation: _noteCtrl.text.trim().isEmpty
             ? null
             : _noteCtrl.text.trim(),
-        createdAt: DateTime.now(),
       );
-      final orderId = await DbService.createOrder(order);
-      CartService.clear();
       if (mounted) {
         Navigator.pushNamed(context, '/confirmed', arguments: orderId);
       }
-    } catch (e) {
+    } on CheckoutException catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Error al confirmar el pedido'),
-          backgroundColor: AppColors.danger,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.message),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No pudimos confirmar el pedido. Tu carrito sigue guardado.',
+            ),
+            backgroundColor: AppColors.danger,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -107,8 +79,22 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Widget build(BuildContext context) {
     final total = CartService.total;
 
+    if (CartService.items.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: Text('Confirmar pedido')),
+        body: AppStateView(
+          icon: Icons.shopping_bag_outlined,
+          title: 'No hay un pedido para confirmar',
+          message: 'Agrega productos desde un comercio para continuar.',
+          actionLabel: 'Volver al inicio',
+          onAction: () =>
+              Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false),
+        ),
+      );
+    }
+
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
           Column(
@@ -117,18 +103,20 @@ class _PaymentScreenState extends State<PaymentScreen> {
               _buildAppBar(context),
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 140),
+                  padding: EdgeInsets.fromLTRB(20, 8, 20, 140),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-
                       // ── Método de pago ─────────────────────────────
-                      const Text('Método de pago',
-                          style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textMuted,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.04)),
+                      Text(
+                        'Método de pago',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.04,
+                        ),
+                      ),
                       const SizedBox(height: 12),
 
                       Row(
@@ -143,50 +131,62 @@ class _PaymentScreenState extends State<PaymentScreen> {
                               child: GestureDetector(
                                 onTap: () => setState(() => _selected = i),
                                 child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 160),
+                                  duration: Duration(milliseconds: 160),
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.surface,
                                     borderRadius: BorderRadius.circular(16),
                                     border: Border.all(
                                       color: sel
                                           ? m.selectedColor
-                                          : AppColors.border,
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.outlineVariant,
                                       width: sel ? 2.5 : 1.5,
                                     ),
                                     boxShadow: sel
                                         ? [
                                             BoxShadow(
-                                              color: m.selectedColor
-                                                  .withValues(alpha: 0.18),
+                                              color: m.selectedColor.withValues(
+                                                alpha: 0.18,
+                                              ),
                                               blurRadius: 12,
                                               offset: const Offset(0, 4),
-                                            )
+                                            ),
                                           ]
                                         : null,
                                   ),
                                   child: Column(
                                     children: [
                                       ClipRRect(
-                                        borderRadius: const BorderRadius.vertical(
-                                            top: Radius.circular(14)),
+                                        borderRadius: BorderRadius.vertical(
+                                          top: Radius.circular(14),
+                                        ),
                                         child: Image.asset(
                                           m.asset,
                                           height: 110,
                                           width: double.infinity,
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, _, _) =>
-                                              Container(
-                                                height: 110,
-                                                color: AppColors.bg,
-                                                child: Icon(Icons.image,
-                                                    color: AppColors.textMuted,
-                                                    size: 40),
-                                              ),
+                                          errorBuilder: (_, _, _) => Container(
+                                            height: 110,
+                                            color: Theme.of(
+                                              context,
+                                            ).scaffoldBackgroundColor,
+                                            child: Icon(
+                                              Icons.image,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurfaceVariant,
+                                              size: 40,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                       Padding(
                                         padding: const EdgeInsets.symmetric(
-                                            vertical: 10),
+                                          vertical: 10,
+                                        ),
                                         child: Row(
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
@@ -196,14 +196,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                                 width: 18,
                                                 height: 18,
                                                 margin: const EdgeInsets.only(
-                                                    right: 6),
+                                                  right: 6,
+                                                ),
                                                 decoration: BoxDecoration(
                                                   shape: BoxShape.circle,
                                                   color: m.selectedColor,
                                                 ),
-                                                child: const Icon(Icons.check,
-                                                    size: 12,
-                                                    color: Colors.white),
+                                                child: Icon(
+                                                  Icons.check,
+                                                  size: 12,
+                                                  color: Colors.white,
+                                                ),
                                               ),
                                             Text(
                                               m.name,
@@ -212,7 +215,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                                 fontWeight: FontWeight.w800,
                                                 color: sel
                                                     ? m.selectedColor
-                                                    : AppColors.appText,
+                                                    : Theme.of(
+                                                        context,
+                                                      ).colorScheme.onSurface,
                                               ),
                                             ),
                                           ],
@@ -230,74 +235,98 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       const SizedBox(height: 20),
 
                       // ── Observación ────────────────────────────────
-                      const Text('Observación',
-                          style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textMuted,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.04)),
-                      const SizedBox(height: 10),
+                      Text(
+                        'Observación',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.04,
+                        ),
+                      ),
+                      SizedBox(height: 10),
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.surface,
                           borderRadius: BorderRadius.circular(16),
-                          border:
-                              Border.all(color: AppColors.border, width: 1.5),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                            width: 1.5,
+                          ),
                         ),
                         child: TextField(
                           controller: _noteCtrl,
                           maxLines: 4,
-                          style: const TextStyle(fontSize: 14, height: 1.5),
+                          style: TextStyle(fontSize: 14, height: 1.5),
                           decoration: InputDecoration(
                             hintText:
                                 'Ej: Sin cebolla, timbrar en el 3er piso, dejar en la puerta...',
                             hintStyle: TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSubtle,
-                                height: 1.5),
+                              fontSize: 13,
+                              color: Theme.of(context).colorScheme.outline,
+                              height: 1.5,
+                            ),
                             border: InputBorder.none,
-                            contentPadding:
-                                const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                            contentPadding: const EdgeInsets.fromLTRB(
+                              16,
+                              14,
+                              16,
+                              14,
+                            ),
                           ),
                           onChanged: (_) => setState(() {}),
                         ),
                       ),
 
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
 
                       // ── Resumen de precios ─────────────────────────
                       Container(
-                        padding: const EdgeInsets.all(16),
+                        padding: EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.surface,
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.border),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
                         ),
                         child: Column(
                           children: [
-                            _PriceRow('Subtotal',
-                                'S/ ${CartService.subtotal.toStringAsFixed(2)}'),
+                            _PriceRow(
+                              'Subtotal',
+                              'S/ ${CartService.subtotal.toStringAsFixed(2)}',
+                            ),
                             const SizedBox(height: 8),
-                            _PriceRow('Envío',
-                                'S/ ${CartService.deliveryFee.toStringAsFixed(2)}'),
-                            const Padding(
+                            _PriceRow(
+                              'Envío',
+                              'S/ ${CartService.deliveryFee.toStringAsFixed(2)}',
+                            ),
+                            Padding(
                               padding: EdgeInsets.symmetric(vertical: 10),
-                              child:
-                                  Divider(color: AppColors.border, height: 1),
+                              child: Divider(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.outlineVariant,
+                                height: 1,
+                              ),
                             ),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('Total a pagar',
-                                    style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w800)),
+                                Text(
+                                  'Total a pagar',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
                                 Text(
                                   'S/ ${total.toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w800,
-                                      color: AppColors.primary),
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.primary,
+                                  ),
                                 ),
                               ],
                             ),
@@ -318,19 +347,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
             right: 0,
             child: Container(
               padding: EdgeInsets.fromLTRB(
-                  20, 14, 20, 14 + MediaQuery.of(context).padding.bottom),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(top: BorderSide(color: AppColors.border)),
+                20,
+                14,
+                20,
+                14 + MediaQuery.of(context).padding.bottom,
               ),
-              child: _loading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                          color: AppColors.primary))
-                  : AppButton(
-                      label: 'Confirmar pedido',
-                      onTap: _confirmOrder,
-                    ),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                border: Border(
+                  top: BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
+              ),
+              child: AppButton(
+                label: 'Confirmar pedido',
+                onTap: _confirmOrder,
+                isLoading: _loading,
+              ),
             ),
           ),
         ],
@@ -340,7 +374,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   Widget _buildAppBar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Row(
         children: [
           GestureDetector(
@@ -349,17 +383,21 @@ class _PaymentScreenState extends State<PaymentScreen> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border)),
-              child: const Icon(Icons.chevron_left, size: 22),
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: Icon(Icons.chevron_left, size: 22),
             ),
           ),
           const SizedBox(width: 12),
-          const Expanded(
-            child: Text('Confirmar pedido',
-                style:
-                    TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          Expanded(
+            child: Text(
+              'Confirmar pedido',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -374,18 +412,25 @@ class _PriceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 13, color: AppColors.textMuted)),
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textMuted,
-                  fontWeight: FontWeight.w600)),
-        ],
-      );
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(
+        label,
+        style: TextStyle(
+          fontSize: 13,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+      Text(
+        value,
+        style: TextStyle(
+          fontSize: 13,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ],
+  );
 }
 
 class _PayMethod {

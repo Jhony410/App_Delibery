@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../delivery_config.dart';
 import '../theme.dart';
 
 /// Ayuda y soporte.
@@ -10,46 +11,39 @@ class HelpScreen extends StatelessWidget {
   const HelpScreen({super.key});
 
   // Contenido estático de preguntas frecuentes.
-  static const _faqs = [
+  static final _faqs = [
     (
       '¿Cómo hago un pedido?',
       'Elige un comercio, agrega productos al carrito, confirma tu dirección '
           'de entrega y el método de pago. Recibirás actualizaciones del estado '
-          'de tu pedido en la pantalla de seguimiento.'
+          'de tu pedido en la pantalla de seguimiento.',
     ),
     (
       '¿Cuánto cuesta el envío?',
-      'El costo de envío depende de cada comercio y se muestra antes de '
-          'confirmar el pedido, en el resumen de precios.'
+      'El delivery tiene una tarifa fija de ${DeliveryConfig.formattedFee} '
+          'para cualquier comercio.',
     ),
     (
       '¿Qué métodos de pago aceptan?',
-      'Actualmente puedes pagar con Yape o en efectivo contra entrega.'
+      'Actualmente puedes pagar con Yape o en efectivo contra entrega.',
     ),
     (
       '¿Puedo cancelar un pedido?',
-      'Un pedido puede cancelarse mientras el comercio aún no lo ha preparado. '
-          'Comunícate con soporte lo antes posible para gestionarlo.'
+      'La cancelación directa aún no está habilitada en la aplicación. Revisa '
+          'tu pedido antes de confirmarlo.',
     ),
     (
       '¿Cómo califico mi pedido?',
       'Cuando tu pedido esté entregado, ábrelo desde "Mis pedidos" y usa el '
-          'botón "Calificar" para valorar al comercio y al repartidor.'
+          'botón "Calificar" para valorar al comercio y al repartidor.',
     ),
-  ];
-
-  // Datos de contacto estáticos.
-  static const _contacts = [
-    (Icons.phone_outlined, 'Teléfono', '+51 900 000 000'),
-    (Icons.email_outlined, 'Correo', 'soporte@delipuno.pe'),
-    (Icons.access_time, 'Horario', 'Lun a Dom · 8:00 - 22:00'),
   ];
 
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Column(
         children: [
           SizedBox(height: top + 8),
@@ -58,13 +52,14 @@ class HelpScreen extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
               children: [
-                const Text('Preguntas frecuentes',
-                    style: TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w800)),
+                Text(
+                  'Preguntas frecuentes',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                ),
                 const SizedBox(height: 10),
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   clipBehavior: Clip.hardEdge,
@@ -79,62 +74,49 @@ class HelpScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
-                const Text('Contacto',
-                    style: TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 10),
+                SizedBox(height: 24),
                 Container(
+                  padding: EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.primaryContainer,
                     borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.15),
+                    ),
                   ),
-                  clipBehavior: Clip.hardEdge,
-                  child: Column(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (var i = 0; i < _contacts.length; i++)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 14),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(
-                                color: i == _contacts.length - 1
-                                    ? Colors.transparent
-                                    : AppColors.border,
+                      Icon(
+                        Icons.support_agent_rounded,
+                        color: AppColors.primary,
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Soporte directo en preparación',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: AppColors.bg,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Icon(_contacts[i].$1,
-                                    size: 18, color: AppColors.appText),
+                            SizedBox(height: 4),
+                            Text(
+                              'Los canales de contacto se mostrarán aquí cuando estén habilitados.',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                height: 1.4,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
-                              const SizedBox(width: 14),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(_contacts[i].$2,
-                                      style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.textMuted)),
-                                  const SizedBox(height: 2),
-                                  Text(_contacts[i].$3,
-                                      style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w700)),
-                                ],
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
+                      ),
                     ],
                   ),
                 ),
@@ -148,7 +130,7 @@ class HelpScreen extends StatelessWidget {
 
   Widget _buildAppBar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Row(
         children: [
           GestureDetector(
@@ -157,16 +139,18 @@ class HelpScreen extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: AppColors.bg,
+                color: Theme.of(context).scaffoldBackgroundColor,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.chevron_left, size: 22),
+              child: Icon(Icons.chevron_left, size: 22),
             ),
           ),
           const SizedBox(width: 8),
-          const Expanded(
-            child: Text('Ayuda y soporte',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          Expanded(
+            child: Text(
+              'Ayuda y soporte',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -198,7 +182,9 @@ class _FaqTileState extends State<_FaqTile> {
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
-            color: widget.isLast ? Colors.transparent : AppColors.border,
+            color: widget.isLast
+                ? Colors.transparent
+                : Theme.of(context).colorScheme.outlineVariant,
           ),
         ),
       ),
@@ -208,31 +194,40 @@ class _FaqTileState extends State<_FaqTile> {
             behavior: HitTestBehavior.opaque,
             onTap: () => setState(() => _open = !_open),
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(widget.question,
-                        style: const TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w600)),
+                    child: Text(
+                      widget.question,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                  Icon(_open ? Icons.remove : Icons.add,
-                      size: 18, color: AppColors.textMuted),
+                  Icon(
+                    _open ? Icons.remove : Icons.add,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ],
               ),
             ),
           ),
           if (_open)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 14),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text(widget.answer,
-                    style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textMuted,
-                        height: 1.4)),
+                child: Text(
+                  widget.answer,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
               ),
             ),
         ],

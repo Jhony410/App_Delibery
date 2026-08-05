@@ -21,14 +21,14 @@ class ChatMessage {
   });
 
   factory ChatMessage.fromMap(String id, Map<String, dynamic> m) => ChatMessage(
-        id: id,
-        senderId: m['senderId'] ?? '',
-        senderRole: m['senderRole'] ?? '',
-        text: m['text'] ?? '',
-        // serverTimestamp is briefly null on the sender's own optimistic write.
-        timestamp: (m['timestamp'] as Timestamp?)?.toDate(),
-        read: m['read'] ?? false,
-      );
+    id: id,
+    senderId: m['senderId'] ?? '',
+    senderRole: m['senderRole'] ?? '',
+    text: m['text'] ?? '',
+    // serverTimestamp is briefly null on the sender's own optimistic write.
+    timestamp: (m['timestamp'] as Timestamp?)?.toDate(),
+    read: m['read'] ?? false,
+  );
 
   bool get isUser => senderRole == 'user';
 }

@@ -60,7 +60,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (_scrollCtrl.hasClients) {
         _scrollCtrl.animateTo(
           _scrollCtrl.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 250),
+          duration: Duration(milliseconds: 250),
           curve: Curves.easeOut,
         );
       }
@@ -71,44 +71,47 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     final id = _orderId;
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         elevation: 0.5,
-        leading: const BackButton(color: AppColors.appText),
+        leading: BackButton(color: Theme.of(context).colorScheme.onSurface),
         titleSpacing: 0,
         title: Row(
           children: [
             Container(
               width: 38,
               height: 38,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: Color(0xFFFFD0B0),
               ),
-              child: const Icon(Icons.motorcycle,
-                  size: 20, color: AppColors.primary),
+              child: Icon(Icons.motorcycle, size: 20, color: AppColors.primary),
             ),
             const SizedBox(width: 10),
-            const Column(
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('Tu repartidor',
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.appText)),
-                Text('En línea',
-                    style:
-                        TextStyle(fontSize: 11, color: AppColors.secondary)),
+                Text(
+                  'Tu repartidor',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                Text(
+                  'En línea',
+                  style: TextStyle(fontSize: 11, color: AppColors.secondary),
+                ),
               ],
             ),
           ],
         ),
       ),
       body: id == null
-          ? const Center(child: Text('Chat no disponible'))
+          ? Center(child: Text('Chat no disponible'))
           : Column(
               children: [
                 Expanded(
@@ -116,9 +119,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     stream: ChatService.streamMessages(id),
                     builder: (context, snap) {
                       if (snap.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                            child: CircularProgressIndicator(
-                                color: AppColors.primary));
+                        return Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.primary,
+                          ),
+                        );
                       }
                       final messages = snap.data ?? const <ChatMessage>[];
                       if (messages.isEmpty) {
@@ -158,18 +163,23 @@ class _Bubble extends StatelessWidget {
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.74),
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          maxWidth: MediaQuery.of(context).size.width * 0.74,
+        ),
+        margin: EdgeInsets.only(bottom: 8),
+        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: mine ? AppColors.primary : Colors.white,
+          color: mine
+              ? AppColors.primary
+              : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
             bottomLeft: Radius.circular(mine ? 16 : 4),
             bottomRight: Radius.circular(mine ? 4 : 16),
           ),
-          border: mine ? null : Border.all(color: AppColors.border),
+          border: mine
+              ? null
+              : Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,17 +189,19 @@ class _Bubble extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 height: 1.35,
-                color: mine ? Colors.white : AppColors.appText,
+                color: mine
+                    ? Colors.white
+                    : Theme.of(context).colorScheme.onSurface,
               ),
             ),
-            const SizedBox(height: 3),
+            SizedBox(height: 3),
             Text(
               _time(message.timestamp),
               style: TextStyle(
                 fontSize: 10,
                 color: mine
                     ? Colors.white.withValues(alpha: 0.8)
-                    : AppColors.textMuted,
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -211,14 +223,23 @@ class _EmptyChat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.chat_bubble_outline, size: 40, color: AppColors.textMuted),
+          Icon(
+            Icons.chat_bubble_outline,
+            size: 40,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           SizedBox(height: 10),
-          Text('Escríbele a tu repartidor',
-              style: TextStyle(fontSize: 14, color: AppColors.textMuted)),
+          Text(
+            'Escríbele a tu repartidor',
+            style: TextStyle(
+              fontSize: 14,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
@@ -239,10 +260,16 @@ class _Composer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          12, 8, 12, 8 + MediaQuery.of(context).padding.bottom),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: AppColors.border)),
+        12,
+        8,
+        12,
+        8 + MediaQuery.of(context).padding.bottom,
+      ),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+        ),
       ),
       child: Row(
         children: [
@@ -256,9 +283,11 @@ class _Composer extends StatelessWidget {
               decoration: InputDecoration(
                 hintText: 'Escribe un mensaje...',
                 filled: true,
-                fillColor: AppColors.bg,
+                fillColor: Theme.of(context).scaffoldBackgroundColor,
                 contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 10),
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(22),
                   borderSide: BorderSide.none,
@@ -272,18 +301,19 @@ class _Composer extends StatelessWidget {
             child: Container(
               width: 44,
               height: 44,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppColors.primary,
               ),
               child: sending
-                  ? const Padding(
+                  ? Padding(
                       padding: EdgeInsets.all(12),
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
-                  : const Icon(Icons.send_rounded,
-                      color: Colors.white, size: 20),
+                  : Icon(Icons.send_rounded, color: Colors.white, size: 20),
             ),
           ),
         ],

@@ -1,6 +1,18 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
 
+String formatDeliveryTime(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return 'Por confirmar';
+  final normalized = trimmed.toLowerCase();
+  if (normalized.contains('min') ||
+      normalized.contains('hora') ||
+      RegExp(r'\d\s*h($|\s)').hasMatch(normalized)) {
+    return trimmed;
+  }
+  return '$trimmed min';
+}
+
 // ── Diagonal-stripe image placeholder ───────────────────────────────────────
 
 class ImgPlaceholder extends StatelessWidget {
@@ -97,14 +109,17 @@ class ImgPlaceholder extends StatelessWidget {
               ? null
               : Center(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.7),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       label.toUpperCase(),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 10,
                         color: Color(0x73000000),
@@ -152,6 +167,8 @@ class AppButton extends StatelessWidget {
   final VoidCallback? onTap;
   final String variant;
   final Widget? leading;
+  final bool isLoading;
+  final bool expand;
 
   const AppButton({
     super.key,
@@ -159,6 +176,8 @@ class AppButton extends StatelessWidget {
     this.onTap,
     this.variant = 'primary',
     this.leading,
+    this.isLoading = false,
+    this.expand = true,
   });
 
   @override
@@ -173,15 +192,15 @@ class AppButton extends StatelessWidget {
         bg = AppColors.secondary;
         fg = Colors.white;
       case 'ghost':
-        bg = Colors.white;
-        fg = AppColors.appText;
-        border = Border.all(color: AppColors.border, width: 1.5);
+        bg = context.colors.surface;
+        fg = context.colors.onSurface;
+        border = Border.all(color: context.colors.outlineVariant, width: 1.5);
       case 'dark':
-        bg = AppColors.appText;
-        fg = Colors.white;
+        bg = context.colors.inverseSurface;
+        fg = context.colors.onInverseSurface;
       case 'soft':
-        bg = AppColors.primaryTint;
-        fg = AppColors.primary;
+        bg = context.colors.primaryContainer;
+        fg = context.colors.onPrimaryContainer;
       default:
         bg = AppColors.primary;
         fg = Colors.white;
@@ -194,41 +213,66 @@ class AppButton extends StatelessWidget {
         ];
     }
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 54,
-        decoration: BoxDecoration(
+    final enabled = onTap != null && !isLoading;
+    final button = Semantics(
+      button: true,
+      enabled: enabled,
+      label: label,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 160),
+        opacity: enabled ? 1 : 0.55,
+        child: Material(
           color: bg,
-          borderRadius: BorderRadius.circular(14),
-          border: border,
-          boxShadow: shadows,
-        ),
-        child: Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (leading != null) ...[leading!, const SizedBox(width: 8)],
-              Flexible(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: fg,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.16,
-                    ),
-                  ),
-                ),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: InkWell(
+            onTap: enabled ? onTap : null,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            child: Container(
+              height: 54,
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: border,
+                boxShadow: shadows,
               ),
-            ],
+              alignment: Alignment.center,
+              child: isLoading
+                  ? SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.4,
+                        color: fg,
+                      ),
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (leading != null) ...[
+                          leading!,
+                          const SizedBox(width: 8),
+                        ],
+                        Flexible(
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: fg,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
           ),
         ),
       ),
     );
+    return expand ? SizedBox(width: double.infinity, child: button) : button;
   }
 }
 
@@ -261,10 +305,10 @@ class AppInputField extends StatelessWidget {
         if (label != null) ...[
           Text(
             label!,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: AppColors.textMuted,
+              color: context.colors.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 8),
@@ -273,14 +317,17 @@ class AppInputField extends StatelessWidget {
           height: 54,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: AppColors.border, width: 1.5),
+            color: context.colors.surface,
+            border: Border.all(
+              color: context.colors.outlineVariant,
+              width: 1.5,
+            ),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Row(
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 20, color: AppColors.textMuted),
+                Icon(icon, size: 20, color: context.colors.onSurfaceVariant),
                 const SizedBox(width: 10),
               ],
               Expanded(
@@ -289,7 +336,9 @@ class AppInputField extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: hasValue ? FontWeight.w500 : FontWeight.w400,
-                    color: hasValue ? AppColors.appText : AppColors.textSubtle,
+                    color: hasValue
+                        ? context.colors.onSurface
+                        : context.colors.outline,
                   ),
                 ),
               ),
@@ -312,6 +361,12 @@ class AppTextField extends StatelessWidget {
   final Widget? trailing;
   final TextEditingController? controller;
   final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+  final Iterable<String>? autofillHints;
+  final String? Function(String?)? validator;
+  final ValueChanged<String>? onSubmitted;
+  final FocusNode? focusNode;
+  final bool enabled;
 
   const AppTextField({
     super.key,
@@ -322,6 +377,12 @@ class AppTextField extends StatelessWidget {
     this.trailing,
     this.controller,
     this.keyboardType,
+    this.textInputAction,
+    this.autofillHints,
+    this.validator,
+    this.onSubmitted,
+    this.focusNode,
+    this.enabled = true,
   });
 
   @override
@@ -332,48 +393,44 @@ class AppTextField extends StatelessWidget {
         if (label != null) ...[
           Text(
             label!,
-            style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textMuted),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 8),
         ],
-        Container(
-          height: 54,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: AppColors.border, width: 1.5),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Row(
-            children: [
-              if (icon != null) ...[
-                Icon(icon, size: 20, color: AppColors.textMuted),
-                const SizedBox(width: 10),
-              ],
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  obscureText: obscure,
-                  keyboardType: keyboardType,
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w500),
-                  decoration: InputDecoration(
-                    hintText: placeholder,
-                    hintStyle: const TextStyle(
-                        fontSize: 15,
-                        color: AppColors.textSubtle,
-                        fontWeight: FontWeight.w400),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
+        TextFormField(
+          controller: controller,
+          focusNode: focusNode,
+          enabled: enabled,
+          obscureText: obscure,
+          keyboardType: keyboardType,
+          textInputAction: textInputAction,
+          autofillHints: autofillHints,
+          validator: validator,
+          onFieldSubmitted: onSubmitted,
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            hintText: placeholder,
+            prefixIcon: icon == null
+                ? null
+                : Icon(
+                    icon,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-                ),
-              ),
-              ?trailing,
-            ],
+            suffixIcon: trailing == null
+                ? null
+                : Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: trailing,
+                  ),
+            suffixIconConstraints: const BoxConstraints(
+              minWidth: 44,
+              minHeight: 44,
+            ),
           ),
         ),
       ],
@@ -390,22 +447,25 @@ class DeliPunoLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: color.withValues(alpha: 0.18),
-      ),
-      child: Center(
-        child: Text(
-          'D',
-          style: TextStyle(
-            color: color,
-            fontSize: size * 0.52,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -2,
-            height: 1,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * 0.22),
+      child: Container(
+        width: size,
+        height: size,
+        color: Colors.white,
+        child: Image.asset(
+          'assets/icon/icon.png',
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => Center(
+            child: Text(
+              'D',
+              style: TextStyle(
+                color: AppColors.primary,
+                fontSize: size * 0.52,
+                fontWeight: FontWeight.w900,
+                height: 1,
+              ),
+            ),
           ),
         ),
       ),
@@ -414,13 +474,9 @@ class DeliPunoLogo extends StatelessWidget {
 }
 
 class DeliPunoWordmark extends StatelessWidget {
-  final Color color;
+  final Color? color;
   final double size;
-  const DeliPunoWordmark({
-    super.key,
-    this.color = AppColors.appText,
-    this.size = 36,
-  });
+  const DeliPunoWordmark({super.key, this.color, this.size = 36});
 
   @override
   Widget build(BuildContext context) {
@@ -430,10 +486,9 @@ class DeliPunoWordmark extends StatelessWidget {
           TextSpan(
             text: 'Deli',
             style: TextStyle(
-              color: color,
+              color: color ?? AppColors.primary,
               fontSize: size,
               fontWeight: FontWeight.w800,
-              letterSpacing: -1.9,
               fontFamily: 'PlusJakartaSans',
               package: null,
             ),
@@ -441,10 +496,9 @@ class DeliPunoWordmark extends StatelessWidget {
           TextSpan(
             text: 'Puno',
             style: TextStyle(
-              color: color,
+              color: color ?? AppColors.secondary,
               fontSize: size,
               fontWeight: FontWeight.w800,
-              letterSpacing: -1.9,
             ),
           ),
           TextSpan(
@@ -481,11 +535,13 @@ class StarRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(total, (i) {
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
+          padding: EdgeInsets.symmetric(horizontal: 4),
           child: Icon(
             i < active ? Icons.star_rounded : Icons.star_border_rounded,
             size: size,
-            color: i < active ? AppColors.star : AppColors.border,
+            color: i < active
+                ? AppColors.star
+                : Theme.of(context).colorScheme.outlineVariant,
           ),
         );
       }),
@@ -517,7 +573,7 @@ class SectionTitle extends StatelessWidget {
             title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.36,
@@ -529,7 +585,7 @@ class SectionTitle extends StatelessWidget {
             onTap: onAction,
             child: Text(
               action!,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
                 color: AppColors.primary,
@@ -537,6 +593,135 @@ class SectionTitle extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class AppStateView extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const AppStateView({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xxl),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: context.colors.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 32, color: AppColors.primary),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.sectionTitle,
+              ),
+              if (message != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  message!,
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.body.copyWith(
+                    color: context.colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              if (actionLabel != null && onAction != null) ...[
+                const SizedBox(height: AppSpacing.xl),
+                AppButton(label: actionLabel!, onTap: onAction, expand: false),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class AppSkeleton extends StatelessWidget {
+  final double height;
+  final double? width;
+  final double radius;
+
+  const AppSkeleton({
+    super.key,
+    required this.height,
+    this.width,
+    this.radius = AppRadius.md,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: height,
+      width: width,
+      decoration: BoxDecoration(
+        color: context.colors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(radius),
+      ),
+    );
+  }
+}
+
+class AppStatusBadge extends StatelessWidget {
+  final String label;
+  final Color color;
+  final IconData? icon;
+
+  const AppStatusBadge({
+    super.key,
+    required this.label,
+    this.color = AppColors.primary,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -551,9 +736,8 @@ Future<bool> showReplaceCartDialog(
   final result = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      title: const Text(
+      title: Text(
         'Solo puedes pedir de una tienda',
         style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
       ),
@@ -561,25 +745,32 @@ Future<bool> showReplaceCartDialog(
         'Tu carrito tiene productos de "$currentStoreName". Solo puedes pedir '
         'de una tienda a la vez. ¿Quieres vaciar el carrito y agregar este '
         'producto?',
-        style: const TextStyle(
-            fontSize: 14, height: 1.45, color: AppColors.textMuted),
+        style: TextStyle(
+          fontSize: 14,
+          height: 1.45,
+          color: ctx.colors.onSurfaceVariant,
+        ),
       ),
       actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text(
+          child: Text(
             'Cancelar',
             style: TextStyle(
-                color: AppColors.textMuted, fontWeight: FontWeight.w700),
+              color: ctx.colors.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text(
+          child: Text(
             'Vaciar carrito y agregar',
             style: TextStyle(
-                color: AppColors.primary, fontWeight: FontWeight.w800),
+              color: AppColors.primary,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
       ],

@@ -16,20 +16,20 @@ class OrderItem {
   });
 
   factory OrderItem.fromMap(Map<String, dynamic> m) => OrderItem(
-        productId: m['productId'],
-        name: m['name'],
-        qty: m['qty'],
-        price: (m['price'] as num).toDouble(),
-        note: m['note'],
-      );
+    productId: m['productId'],
+    name: m['name'],
+    qty: m['qty'],
+    price: (m['price'] as num).toDouble(),
+    note: m['note'],
+  );
 
   Map<String, dynamic> toMap() => {
-        'productId': productId,
-        'name': name,
-        'qty': qty,
-        'price': price,
-        'note': note,
-      };
+    'productId': productId,
+    'name': name,
+    'qty': qty,
+    'price': price,
+    'note': note,
+  };
 }
 
 class OrderModel {
@@ -104,86 +104,84 @@ class OrderModel {
   });
 
   factory OrderModel.fromMap(String id, Map<String, dynamic> m) => OrderModel(
-        id: id,
-        userId: m['userId'],
-        storeId: m['storeId'],
-        storeName: m['storeName'],
-        storeTone: m['storeTone'] ?? 'warm',
-        storeAddress: m['storeAddress'] as String?,
-        storePhone: m['storePhone'] as String?,
-        storeLat: (m['storeLat'] as num?)?.toDouble(),
-        storeLng: (m['storeLng'] as num?)?.toDouble(),
-        deliveryLat: (m['deliveryLat'] as num?)?.toDouble(),
-        deliveryLng: (m['deliveryLng'] as num?)?.toDouble(),
-        items: (m['items'] as List)
-            .map((i) => OrderItem.fromMap(Map<String, dynamic>.from(i)))
-            .toList(),
-        subtotal: (m['subtotal'] as num).toDouble(),
-        deliveryFee: (m['deliveryFee'] as num).toDouble(),
-        total: (m['total'] as num).toDouble(),
-        status: m['status'],
-        address: m['address'],
-        paymentMethod: m['paymentMethod'],
-        observation: m['observation'] as String?,
-        courierId: m['courierId'] as String?,
-        courierName: m['courierName'] as String?,
-        assignedCourierId: m['assignedCourierId'] as String?,
-        rated: m['rated'] ?? false,
-        createdAt: (m['createdAt'] as Timestamp).toDate(),
-      );
+    id: id,
+    userId: m['userId'],
+    storeId: m['storeId'],
+    storeName: m['storeName'],
+    storeTone: m['storeTone'] ?? 'warm',
+    storeAddress: m['storeAddress'] as String?,
+    storePhone: m['storePhone'] as String?,
+    storeLat: (m['storeLat'] as num?)?.toDouble(),
+    storeLng: (m['storeLng'] as num?)?.toDouble(),
+    deliveryLat: (m['deliveryLat'] as num?)?.toDouble(),
+    deliveryLng: (m['deliveryLng'] as num?)?.toDouble(),
+    items: (m['items'] as List)
+        .map((i) => OrderItem.fromMap(Map<String, dynamic>.from(i)))
+        .toList(),
+    subtotal: (m['subtotal'] as num).toDouble(),
+    deliveryFee: (m['deliveryFee'] as num).toDouble(),
+    total: (m['total'] as num).toDouble(),
+    status: m['status'],
+    address: m['address'],
+    paymentMethod: m['paymentMethod'],
+    observation: m['observation'] as String?,
+    courierId: m['courierId'] as String?,
+    courierName: m['courierName'] as String?,
+    assignedCourierId: m['assignedCourierId'] as String?,
+    rated: m['rated'] ?? false,
+    createdAt: (m['createdAt'] as Timestamp).toDate(),
+  );
 
   Map<String, dynamic> toMap() => {
-        'userId': userId,
-        'storeId': storeId,
-        'storeName': storeName,
-        'storeTone': storeTone,
-        if (storeAddress != null && storeAddress!.isNotEmpty)
-          'storeAddress': storeAddress,
-        if (storePhone != null && storePhone!.isNotEmpty)
-          'storePhone': storePhone,
-        // Coordinates: written only when known. A store/address without
-        // coordinates yields null here, and the order is still created — the
-        // purchase is never blocked.
-        if (storeLat != null) 'storeLat': storeLat,
-        if (storeLng != null) 'storeLng': storeLng,
-        if (deliveryLat != null) 'deliveryLat': deliveryLat,
-        if (deliveryLng != null) 'deliveryLng': deliveryLng,
-        'items': items.map((i) => i.toMap()).toList(),
-        'subtotal': subtotal,
-        'deliveryFee': deliveryFee,
-        'total': total,
-        'status': status,
-        'courierId': courierId,
-        'address': address,
-        'paymentMethod': paymentMethod,
-        if (observation != null && observation!.isNotEmpty)
-          'observation': observation,
-        'createdAt': Timestamp.fromDate(createdAt),
-        // TTL fields for auto-deletion (see Cloud Function autoDeleteExpiredOrders).
-        // An un-picked-up order self-expires 30 min after it is created.
-        'expiresAt':
-            Timestamp.fromDate(createdAt.add(const Duration(minutes: 30))),
-        // Set by the admin panel when an order is cancelled; null until then.
-        'cancelledAt': null,
-        // Round-robin courier dispatch (owned by Cloud Functions + courier app).
-        // assignedCourierId: courier currently being offered the order.
-        // assignmentExpiresAt: when that 15s offer lapses.
-        // rejectedCouriers: couriers that already rejected / timed out.
-        'assignedCourierId': null,
-        'assignmentExpiresAt': null,
-        'rejectedCouriers': <String>[],
-      };
+    'userId': userId,
+    'storeId': storeId,
+    'storeName': storeName,
+    'storeTone': storeTone,
+    if (storeAddress != null && storeAddress!.isNotEmpty)
+      'storeAddress': storeAddress,
+    if (storePhone != null && storePhone!.isNotEmpty) 'storePhone': storePhone,
+    // Coordinates: written only when known. A store/address without
+    // coordinates yields null here, and the order is still created — the
+    // purchase is never blocked.
+    if (storeLat != null) 'storeLat': storeLat,
+    if (storeLng != null) 'storeLng': storeLng,
+    if (deliveryLat != null) 'deliveryLat': deliveryLat,
+    if (deliveryLng != null) 'deliveryLng': deliveryLng,
+    'items': items.map((i) => i.toMap()).toList(),
+    'subtotal': subtotal,
+    'deliveryFee': deliveryFee,
+    'total': total,
+    'status': status,
+    'courierId': courierId,
+    'address': address,
+    'paymentMethod': paymentMethod,
+    if (observation != null && observation!.isNotEmpty)
+      'observation': observation,
+    'createdAt': Timestamp.fromDate(createdAt),
+    // TTL fields for auto-deletion (see Cloud Function autoDeleteExpiredOrders).
+    // An un-picked-up order self-expires 30 min after it is created.
+    'expiresAt': Timestamp.fromDate(createdAt.add(const Duration(minutes: 30))),
+    // Set by the admin panel when an order is cancelled; null until then.
+    'cancelledAt': null,
+    // Round-robin courier dispatch (owned by Cloud Functions + courier app).
+    // assignedCourierId: courier currently being offered the order.
+    // assignmentExpiresAt: when that 15s offer lapses.
+    // rejectedCouriers: couriers that already rejected / timed out.
+    'assignedCourierId': null,
+    'assignmentExpiresAt': null,
+    'rejectedCouriers': <String>[],
+  };
 
   // pending | confirmed | preparing | accepted | picked_up | en_camino
   //         | entregado | cancelado
   String get statusLabel => switch (status) {
-        'en_camino' => 'En camino',
-        'entregado' => 'Entregado',
-        'cancelado' => 'Cancelado',
-        'picked_up' => 'Recogido',
-        'accepted' => 'Repartidor asignado',
-        'preparing' => 'Preparando',
-        'confirmed' => 'Confirmado',
-        _ => 'Pendiente',
-      };
+    'en_camino' => 'En camino',
+    'entregado' => 'Entregado',
+    'cancelado' => 'Cancelado',
+    'picked_up' => 'Recogido',
+    'accepted' => 'Repartidor asignado',
+    'preparing' => 'Preparando',
+    'confirmed' => 'Confirmado',
+    _ => 'Pendiente',
+  };
 }

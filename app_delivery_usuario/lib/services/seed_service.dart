@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../delivery_config.dart';
 
 class SeedService {
   static final _db = FirebaseFirestore.instance;
@@ -18,7 +19,7 @@ class SeedService {
         'rating': 4.8,
         'reviewCount': 1240,
         'deliveryTime': '25-35',
-        'deliveryFee': 5.90,
+        'deliveryFee': DeliveryConfig.fixedFee,
         'isOpen': true,
         'address': 'Av. Arequipa 2450, Lince',
         'promo': '-20%',
@@ -31,7 +32,7 @@ class SeedService {
         'rating': 4.8,
         'reviewCount': 2100,
         'deliveryTime': '25-35',
-        'deliveryFee': 5.90,
+        'deliveryFee': DeliveryConfig.fixedFee,
         'isOpen': true,
         'address': 'Av. Arequipa 2450, Lince',
         'promo': null,
@@ -44,7 +45,7 @@ class SeedService {
         'rating': 4.9,
         'reviewCount': 890,
         'deliveryTime': '15-20',
-        'deliveryFee': 3.90,
+        'deliveryFee': DeliveryConfig.fixedFee,
         'isOpen': true,
         'address': 'Jr. Camaná 345, Cercado',
         'promo': null,
@@ -57,7 +58,7 @@ class SeedService {
         'rating': 4.6,
         'reviewCount': 3200,
         'deliveryTime': '35-45',
-        'deliveryFee': 7.90,
+        'deliveryFee': DeliveryConfig.fixedFee,
         'isOpen': true,
         'address': 'Av. Javier Prado 4200, Surco',
         'promo': null,
@@ -70,7 +71,7 @@ class SeedService {
         'rating': 4.7,
         'reviewCount': 560,
         'deliveryTime': '30-40',
-        'deliveryFee': 5.00,
+        'deliveryFee': DeliveryConfig.fixedFee,
         'isOpen': true,
         'address': 'Calle Los Laureles 120, San Isidro',
         'promo': null,
@@ -83,7 +84,7 @@ class SeedService {
         'rating': 4.5,
         'reviewCount': 780,
         'deliveryTime': '20-30',
-        'deliveryFee': 4.50,
+        'deliveryFee': DeliveryConfig.fixedFee,
         'isOpen': true,
         'address': 'Jr. Capón 230, Cercado',
         'promo': null,
@@ -93,13 +94,19 @@ class SeedService {
 
     for (final store in stores) {
       final ref = await _db.collection('stores').add(store);
-      await _seedProducts(ref.id, store['categorySlug'] as String,
-          store['name'] as String);
+      await _seedProducts(
+        ref.id,
+        store['categorySlug'] as String,
+        store['name'] as String,
+      );
     }
   }
 
   static Future<void> _seedProducts(
-      String storeId, String slug, String storeName) async {
+    String storeId,
+    String slug,
+    String storeName,
+  ) async {
     final products = _products(slug, storeName);
     final batch = _db.batch();
     for (final p in products) {
@@ -154,7 +161,8 @@ class SeedService {
             },
             {
               'name': 'Ensalada mixta',
-              'description': 'Lechuga, tomate, pepino, palta y aderezo de la casa.',
+              'description':
+                  'Lechuga, tomate, pepino, palta y aderezo de la casa.',
               'price': 12.50,
               'tone': 'green',
               'badge': null,
@@ -182,8 +190,7 @@ class SeedService {
           return [
             {
               'name': 'Pizza familiar hawaiana',
-              'description':
-                  'Jamón, piña y queso mozzarella. Tamaño familiar.',
+              'description': 'Jamón, piña y queso mozzarella. Tamaño familiar.',
               'price': 54.00,
               'tone': 'warm',
               'badge': 'Top',

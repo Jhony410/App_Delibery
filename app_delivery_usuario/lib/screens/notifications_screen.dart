@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
+import '../widgets.dart';
 import '../models/notification_model.dart';
 import '../services/db_service.dart';
 import '../services/auth_service.dart';
@@ -12,24 +13,49 @@ class NotificationsScreen extends StatelessWidget {
     final uid = AuthService.currentUid;
     final top = MediaQuery.of(context).padding.top;
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Column(
         children: [
           SizedBox(height: top + 8),
           _buildAppBar(context),
           Expanded(
             child: uid == null
-                ? const _EmptyState()
+                ? const AppStateView(
+                    icon: Icons.login_rounded,
+                    title: 'Inicia sesión para ver tus notificaciones',
+                  )
                 : StreamBuilder<List<NotificationModel>>(
                     stream: DbService.streamUserNotifications(uid),
                     builder: (context, snap) {
                       if (snap.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                            child: CircularProgressIndicator(
-                                color: AppColors.primary));
+                        return Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Column(
+                            children: [
+                              AppSkeleton(height: 94),
+                              SizedBox(height: 10),
+                              AppSkeleton(height: 94),
+                            ],
+                          ),
+                        );
+                      }
+                      if (snap.hasError) {
+                        return const AppStateView(
+                          icon: Icons.cloud_off_rounded,
+                          title: 'No pudimos cargar tus notificaciones',
+                          message:
+                              'Revisa tu conexión. Se actualizarán automáticamente.',
+                        );
                       }
                       final items = snap.data ?? [];
-                      if (items.isEmpty) return const _EmptyState();
+                      if (items.isEmpty) {
+                        return const AppStateView(
+                          icon: Icons.notifications_none_rounded,
+                          title: 'No tienes notificaciones',
+                          message:
+                              'Aquí aparecerán las novedades de tus pedidos.',
+                        );
+                      }
                       return ListView.separated(
                         padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
                         itemCount: items.length,
@@ -48,7 +74,7 @@ class NotificationsScreen extends StatelessWidget {
 
   Widget _buildAppBar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Row(
         children: [
           GestureDetector(
@@ -57,16 +83,18 @@ class NotificationsScreen extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: AppColors.bg,
+                color: Theme.of(context).scaffoldBackgroundColor,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.chevron_left, size: 22),
+              child: Icon(Icons.chevron_left, size: 22),
             ),
           ),
           const SizedBox(width: 8),
-          const Expanded(
-            child: Text('Notificaciones',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          Expanded(
+            child: Text(
+              'Notificaciones',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -80,15 +108,26 @@ class NotificationsScreen extends StatelessWidget {
           : () async {
               try {
                 await DbService.markNotificationRead(uid, n.id);
-              } catch (_) {}
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('No se pudo marcar como leída'),
+                      backgroundColor: AppColors.danger,
+                    ),
+                  );
+                }
+              }
             },
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: n.read ? AppColors.border : AppColors.primary,
+            color: n.read
+                ? Theme.of(context).colorScheme.outlineVariant
+                : AppColors.primary,
             width: n.read ? 1 : 1.5,
           ),
         ),
@@ -99,34 +138,48 @@ class NotificationsScreen extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: n.read ? AppColors.bg : AppColors.primaryTint,
+                color: n.read
+                    ? Theme.of(context).scaffoldBackgroundColor
+                    : Theme.of(context).colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(Icons.notifications_none,
-                  size: 18,
-                  color: n.read ? AppColors.textMuted : AppColors.primary),
+              child: Icon(
+                Icons.notifications_none,
+                size: 18,
+                color: n.read
+                    ? Theme.of(context).colorScheme.onSurfaceVariant
+                    : AppColors.primary,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(n.title,
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w700)),
+                  Text(
+                    n.title,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                  ),
                   if (n.body.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(n.body,
-                        style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textMuted,
-                            height: 1.35)),
+                    SizedBox(height: 3),
+                    Text(
+                      n.body,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        height: 1.35,
+                      ),
+                    ),
                   ],
                   if (n.createdAt != null) ...[
-                    const SizedBox(height: 6),
-                    Text(_formatDate(n.createdAt!),
-                        style: const TextStyle(
-                            fontSize: 11, color: AppColors.textSubtle)),
+                    SizedBox(height: 6),
+                    Text(
+                      _formatDate(n.createdAt!),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -136,7 +189,7 @@ class NotificationsScreen extends StatelessWidget {
                 width: 8,
                 height: 8,
                 margin: const EdgeInsets.only(top: 4, left: 4),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: AppColors.primary,
                   shape: BoxShape.circle,
                 ),
@@ -153,28 +206,5 @@ class NotificationsScreen extends StatelessWidget {
     if (diff.inMinutes < 60) return 'Hace ${diff.inMinutes} min';
     if (diff.inHours < 24) return 'Hace ${diff.inHours} h';
     return '${dt.day}/${dt.month}/${dt.year}';
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.notifications_off_outlined,
-              size: 64, color: AppColors.border),
-          SizedBox(height: 16),
-          Text('Sin notificaciones',
-              style: TextStyle(
-                  fontSize: 16,
-                  color: AppColors.textMuted,
-                  fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
   }
 }

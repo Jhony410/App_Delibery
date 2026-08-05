@@ -60,29 +60,61 @@ class _MainShellState extends State<MainShell> {
     super.dispose();
   }
 
-  void _goToTab(int i) => setState(() => _tab = i);
+  void _goToTab(int i) {
+    if (i == _tab) return;
+    setState(() => _tab = i);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MainShellScope(
-      goToTab: _goToTab,
-      searchCategory: _searchCategory,
-      child: Scaffold(
-        body: IndexedStack(index: _tab, children: _screens),
-        bottomNavigationBar: _AppBottomNavBar(
-          activeIndex: _tab,
-          onTap: _goToTab,
+    return MainTabBackHandler(
+      activeIndex: _tab,
+      onBackToHome: () => _goToTab(0),
+      child: MainShellScope(
+        goToTab: _goToTab,
+        searchCategory: _searchCategory,
+        child: Scaffold(
+          body: IndexedStack(index: _tab, children: _screens),
+          bottomNavigationBar: AppBottomNavBar(
+            activeIndex: _tab,
+            onTap: _goToTab,
+          ),
         ),
       ),
     );
   }
 }
 
-class _AppBottomNavBar extends StatelessWidget {
+class MainTabBackHandler extends StatelessWidget {
+  final int activeIndex;
+  final VoidCallback onBackToHome;
+  final Widget child;
+
+  const MainTabBackHandler({
+    super.key,
+    required this.activeIndex,
+    required this.onBackToHome,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: activeIndex == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && activeIndex != 0) onBackToHome();
+      },
+      child: child,
+    );
+  }
+}
+
+class AppBottomNavBar extends StatelessWidget {
   final int activeIndex;
   final ValueChanged<int> onTap;
 
-  const _AppBottomNavBar({
+  const AppBottomNavBar({
+    super.key,
     required this.activeIndex,
     required this.onTap,
   });
@@ -96,15 +128,16 @@ class _AppBottomNavBar extends StatelessWidget {
       ('Perfil', Icons.person_rounded, Icons.person_outline),
     ];
 
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: AppColors.border)),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        border: Border(top: BorderSide(color: context.colors.outlineVariant)),
+        boxShadow: context.isDark ? null : AppShadows.card,
       ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
           child: Row(
             children: List.generate(tabs.length, (i) {
               final isActive = i == activeIndex;
@@ -112,26 +145,44 @@ class _AppBottomNavBar extends StatelessWidget {
                 child: GestureDetector(
                   onTap: () => onTap(i),
                   behavior: HitTestBehavior.opaque,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isActive ? tabs[i].$2 : tabs[i].$3,
-                        size: 24,
-                        color: isActive ? AppColors.primary : AppColors.textSubtle,
+                  child: Semantics(
+                    button: true,
+                    selected: isActive,
+                    label: tabs[i].$1,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 5),
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? context.colors.primaryContainer
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(AppRadius.md),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        tabs[i].$1,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight:
-                              isActive ? FontWeight.w700 : FontWeight.w500,
-                          color:
-                              isActive ? AppColors.primary : AppColors.textSubtle,
-                        ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isActive ? tabs[i].$2 : tabs[i].$3,
+                            size: 23,
+                            color: isActive
+                                ? context.colors.primary
+                                : context.colors.onSurfaceVariant,
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            tabs[i].$1,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: isActive
+                                  ? FontWeight.w800
+                                  : FontWeight.w600,
+                              color: isActive
+                                  ? context.colors.primary
+                                  : context.colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               );

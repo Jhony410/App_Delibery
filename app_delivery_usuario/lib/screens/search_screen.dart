@@ -4,6 +4,7 @@ import '../widgets.dart';
 import '../app_images.dart';
 import '../models/store_model.dart';
 import '../services/db_service.dart';
+import '../delivery_config.dart';
 import 'main_shell.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -27,6 +28,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   List<StoreModel> _all = [];
   bool _loading = true;
+  bool _loadError = false;
   String _query = '';
   String? _categorySlug;
 
@@ -67,12 +69,26 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _loadStores() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = false;
+    });
     try {
       final stores = await DbService.getStores();
-      if (mounted) setState(() { _all = stores; _loading = false; });
-    } catch (e) {
-      if (mounted) setState(() { _all = []; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _all = stores;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _all = [];
+          _loading = false;
+          _loadError = true;
+        });
+      }
     }
   }
 
@@ -100,7 +116,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -117,44 +133,57 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildSearchField() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: Container(
         height: 46,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+        padding: EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: AppColors.bg,
+          color: Theme.of(context).scaffoldBackgroundColor,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
-            const Icon(Icons.search, size: 19, color: AppColors.textMuted),
-            const SizedBox(width: 10),
+            Icon(
+              Icons.search,
+              size: 19,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            SizedBox(width: 10),
             Expanded(
               child: TextField(
                 controller: _ctrl,
                 onChanged: (v) => setState(() => _query = v),
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w600),
-                decoration: const InputDecoration(
-                  hintText: 'Busca tiendas o productos…',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                decoration: InputDecoration(
+                  filled: false,
+                  hintText: 'Busca tiendas o categorías',
                   hintStyle: TextStyle(
-                      fontSize: 15,
-                      color: AppColors.textSubtle,
-                      fontWeight: FontWeight.w400),
+                    fontSize: 15,
+                    color: Theme.of(context).colorScheme.outline,
+                    fontWeight: FontWeight.w400,
+                  ),
                   border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
                   isDense: true,
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
             ),
             if (_ctrl.text.isNotEmpty)
-              GestureDetector(
-                onTap: () {
+              IconButton(
+                tooltip: 'Limpiar búsqueda',
+                constraints: BoxConstraints.tightFor(width: 36, height: 36),
+                padding: EdgeInsets.zero,
+                onPressed: () {
                   _ctrl.clear();
                   setState(() => _query = '');
                 },
-                child: const Icon(Icons.close,
-                    size: 18, color: AppColors.textMuted),
+                icon: Icon(
+                  Icons.close,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
           ],
         ),
@@ -167,29 +196,35 @@ class _SearchScreenState extends State<SearchScreen> {
       height: 36,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: EdgeInsets.symmetric(horizontal: 16),
         itemCount: _categories.length,
-        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        separatorBuilder: (context, index) => SizedBox(width: 8),
         itemBuilder: (context, i) {
           final c = _categories[i];
           final sel = c.$2 == _categorySlug;
-          return GestureDetector(
-            onTap: () => setState(() => _categorySlug = c.$2),
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-              decoration: BoxDecoration(
-                color: sel ? AppColors.appText : Colors.white,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: sel ? Colors.transparent : AppColors.border,
-                ),
+          return ChoiceChip(
+            showCheckmark: false,
+            selected: sel,
+            onSelected: (_) => setState(() => _categorySlug = c.$2),
+            side: BorderSide(
+              color: sel
+                  ? AppColors.primary
+                  : Theme.of(context).colorScheme.outlineVariant,
+            ),
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            selectedColor: AppColors.primary,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+            ),
+            label: Text(
+              c.$1,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: sel
+                    ? Colors.white
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
-              child: Text(c.$1,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: sel ? Colors.white : AppColors.textMuted)),
             ),
           );
         },
@@ -199,28 +234,30 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildActiveFilterChip() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: AppColors.primaryTint,
+              color: Theme.of(context).colorScheme.primaryContainer,
               borderRadius: BorderRadius.circular(999),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Filtro: ${_categoryLabel!}',
-                    style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary)),
+                Text(
+                  'Filtro: ${_categoryLabel!}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
                 const SizedBox(width: 6),
                 GestureDetector(
                   onTap: () => setState(() => _categorySlug = null),
-                  child: const Icon(Icons.close,
-                      size: 15, color: AppColors.primary),
+                  child: Icon(Icons.close, size: 15, color: AppColors.primary),
                 ),
               ],
             ),
@@ -232,8 +269,27 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(
-          child: CircularProgressIndicator(color: AppColors.primary));
+      return Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            AppSkeleton(height: 78),
+            SizedBox(height: 10),
+            AppSkeleton(height: 78),
+            SizedBox(height: 10),
+            AppSkeleton(height: 78),
+          ],
+        ),
+      );
+    }
+    if (_loadError) {
+      return AppStateView(
+        icon: Icons.wifi_off_rounded,
+        title: 'No pudimos buscar comercios',
+        message: 'Comprueba tu conexión e inténtalo nuevamente.',
+        actionLabel: 'Reintentar',
+        onAction: _loadStores,
+      );
     }
     final results = _filtered;
     return RefreshIndicator(
@@ -242,27 +298,29 @@ class _SearchScreenState extends State<SearchScreen> {
       child: results.isEmpty
           ? ListView(
               children: [
-                SizedBox(height: MediaQuery.of(context).size.height * 0.25),
-                Center(
-                  child: Text(
-                    _query.trim().isEmpty
-                        ? 'Sin resultados'
-                        : 'Sin resultados para "${_query.trim()}"',
-                    style: const TextStyle(color: AppColors.textMuted),
-                  ),
+                SizedBox(height: MediaQuery.of(context).size.height * 0.12),
+                AppStateView(
+                  icon: Icons.search_off_rounded,
+                  title: 'No encontramos resultados',
+                  message: _query.trim().isEmpty
+                      ? 'Prueba con otra categoría.'
+                      : 'Prueba con un nombre o categoría diferente.',
                 ),
               ],
             )
           : ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
+              physics: AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.all(16),
               children: [
-                const Text('COMERCIOS',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textMuted,
-                        letterSpacing: 0.06)),
+                Text(
+                  'COMERCIOS',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    letterSpacing: 0.06,
+                  ),
+                ),
                 const SizedBox(height: 10),
                 ...results.map(_storeTile),
               ],
@@ -271,59 +329,106 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _storeTile(StoreModel store) {
-    return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, '/store', arguments: store.id),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(
-          children: [
-            ImgPlaceholder(
-              label: store.name.split(' ')[0],
-              height: 56,
-              width: 56,
-              tone: store.tone,
-              radius: 10,
-              assetPath: assetForKey(store.id),
-              imageUrl: store.imagenUrl,
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        onTap: () =>
+            Navigator.pushNamed(context, '/store', arguments: store.id),
+        child: Container(
+          margin: EdgeInsets.only(bottom: 10),
+          padding: EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outlineVariant,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            boxShadow: AppShadows.card,
+          ),
+          child: Row(
+            children: [
+              ImgPlaceholder(
+                label: store.name.split(' ')[0],
+                height: 56,
+                width: 56,
+                tone: store.tone,
+                radius: 10,
+                assetPath: assetForKey(store.id),
+                imageUrl: store.imagenUrl,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      store.name,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      store.category,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.star_rounded,
+                          size: 11,
+                          color: AppColors.star,
+                        ),
+                        SizedBox(width: 3),
+                        Text(
+                          store.rating.toStringAsFixed(1),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          ' · ${formatDeliveryTime(store.deliveryTime)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(store.name,
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text(store.category,
-                      style: const TextStyle(
-                          fontSize: 11.5, color: AppColors.textMuted)),
-                  const SizedBox(height: 5),
-                  Row(
-                    children: [
-                      const Icon(Icons.star_rounded,
-                          size: 11, color: AppColors.star),
-                      const SizedBox(width: 3),
-                      Text(store.rating.toStringAsFixed(1),
-                          style: const TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.w600)),
-                      Text(' · ${store.deliveryTime} min',
-                          style: const TextStyle(
-                              fontSize: 11, color: AppColors.textMuted)),
-                    ],
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Delivery ${DeliveryConfig.formattedFee}',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ],
               ),
-            ),
-            const Icon(Icons.chevron_right,
-                size: 18, color: AppColors.textSubtle),
-          ],
+            ],
+          ),
         ),
       ),
     );

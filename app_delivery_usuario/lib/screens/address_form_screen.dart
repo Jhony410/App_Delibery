@@ -66,7 +66,9 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
     } else {
       // Modo crear: siembra coordenadas con la ubicación actual (solo GPS, sin
       // geocoding). El texto de calle se obtiene al abrir el mapa completo.
-      WidgetsBinding.instance.addPostFrameCallback((_) => _seedCurrentLocation());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _seedCurrentLocation(),
+      );
     }
   }
 
@@ -92,11 +94,15 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
         return;
       }
       final pos = await Geolocator.getCurrentPosition(
-        locationSettings:
-            const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
       if (!mounted) return;
-      setState(() { _lat = pos.latitude; _lng = pos.longitude; });
+      setState(() {
+        _lat = pos.latitude;
+        _lng = pos.longitude;
+      });
       _movePreview();
     } catch (_) {
       // Silencioso: el usuario puede abrir el mapa manualmente.
@@ -107,8 +113,9 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
       (_lat != null && _lng != null) ? LatLng(_lat!, _lng!) : _punoCenter;
 
   void _movePreview() {
-    _previewController
-        ?.animateCamera(CameraUpdate.newLatLngZoom(_previewTarget, 16));
+    _previewController?.animateCamera(
+      CameraUpdate.newLatLngZoom(_previewTarget, 16),
+    );
   }
 
   Future<void> _openPicker() async {
@@ -134,6 +141,7 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     final street = _streetCtrl.text.trim();
     if (street.isEmpty) {
       _snack('Ingresa la calle o avenida', error: true);
@@ -141,7 +149,9 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
     }
     final uid = AuthService.currentUid;
     if (uid == null) return;
-    final label = _labelCtrl.text.trim().isEmpty ? 'Casa' : _labelCtrl.text.trim();
+    final label = _labelCtrl.text.trim().isEmpty
+        ? 'Casa'
+        : _labelCtrl.text.trim();
     final ref = _refCtrl.text.trim().isEmpty ? null : _refCtrl.text.trim();
 
     final addr = AddressModel(
@@ -174,16 +184,18 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
 
   void _snack(String msg, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: error ? AppColors.danger : AppColors.secondary,
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: error ? AppColors.danger : AppColors.secondary,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: Stack(
         children: [
           Column(
@@ -202,33 +214,46 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
                         onTap: _openPicker,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 12),
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                                color: AppColors.primary, width: 1.5),
+                              color: AppColors.primary,
+                              width: 1.5,
+                            ),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.map_outlined,
-                                  size: 18, color: AppColors.primary),
+                              Icon(
+                                Icons.map_outlined,
+                                size: 18,
+                                color: AppColors.primary,
+                              ),
                               SizedBox(width: 8),
-                              Text('Ajustar el punto en el mapa',
-                                  style: TextStyle(
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.primary)),
+                              Text(
+                                'Ajustar el punto en el mapa',
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary,
+                                ),
+                              ),
                             ],
                           ),
                         ),
                       ),
                       const SizedBox(height: 20),
-                      const Text('Etiqueta',
-                          style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textMuted)),
+                      Text(
+                        'Etiqueta',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       _buildLabelChips(),
                       const SizedBox(height: 12),
@@ -263,16 +288,24 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
             right: 0,
             child: Container(
               padding: EdgeInsets.fromLTRB(
-                  20, 16, 20, 16 + MediaQuery.of(context).padding.bottom),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(top: BorderSide(color: AppColors.border)),
+                20,
+                16,
+                20,
+                16 + MediaQuery.of(context).padding.bottom,
               ),
-              child: _saving
-                  ? const Center(
-                      child:
-                          CircularProgressIndicator(color: AppColors.primary))
-                  : AppButton(label: 'Guardar dirección', onTap: _save),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                border: Border(
+                  top: BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
+              ),
+              child: AppButton(
+                label: 'Guardar dirección',
+                onTap: _save,
+                isLoading: _saving,
+              ),
             ),
           ),
         ],
@@ -292,8 +325,10 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
             // El mapa es solo vista previa: gestos deshabilitados + IgnorePointer.
             IgnorePointer(
               child: GoogleMap(
-                initialCameraPosition:
-                    CameraPosition(target: _previewTarget, zoom: 16),
+                initialCameraPosition: CameraPosition(
+                  target: _previewTarget,
+                  zoom: 16,
+                ),
                 onMapCreated: (c) => _previewController = c,
                 scrollGesturesEnabled: false,
                 zoomGesturesEnabled: false,
@@ -308,24 +343,31 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
             const IgnorePointer(
               child: Padding(
                 padding: EdgeInsets.only(bottom: 22),
-                child: Icon(Icons.location_on,
-                    size: 36, color: AppColors.primary),
+                child: Icon(
+                  Icons.location_on,
+                  size: 36,
+                  color: AppColors.primary,
+                ),
               ),
             ),
             Positioned(
               bottom: 8,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: AppColors.appText.withValues(alpha: 0.8),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.8),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text('Toca para ajustar',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700)),
+                child: Text(
+                  'Toca para ajustar',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ),
             // Capa transparente que captura el toque para abrir el mapa completo.
@@ -346,23 +388,32 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
       children: _quickLabels.map((l) {
         final sel = _labelCtrl.text.trim().toLowerCase() == l.toLowerCase();
         return Padding(
-          padding: const EdgeInsets.only(right: 8),
+          padding: EdgeInsets.only(right: 8),
           child: GestureDetector(
             onTap: () => setState(() => _labelCtrl.text = l),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: sel ? AppColors.appText : Colors.white,
+                color: sel
+                    ? Theme.of(context).colorScheme.onSurface
+                    : Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(
-                    color: sel ? Colors.transparent : AppColors.border),
+                  color: sel
+                      ? Colors.transparent
+                      : Theme.of(context).colorScheme.outlineVariant,
+                ),
               ),
-              child: Text(l,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: sel ? Colors.white : AppColors.textMuted)),
+              child: Text(
+                l,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: sel
+                      ? Colors.white
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
             ),
           ),
         );
@@ -372,7 +423,7 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
 
   Widget _buildAppBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Row(
         children: [
           GestureDetector(
@@ -381,10 +432,10 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: AppColors.bg,
+                color: Theme.of(context).scaffoldBackgroundColor,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.chevron_left, size: 22),
+              child: Icon(Icons.chevron_left, size: 22),
             ),
           ),
           const SizedBox(width: 8),
@@ -393,8 +444,7 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
               _mode == AddressFormMode.edit
                   ? 'Editar dirección'
                   : 'Agregar dirección',
-              style:
-                  const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
             ),
           ),
         ],

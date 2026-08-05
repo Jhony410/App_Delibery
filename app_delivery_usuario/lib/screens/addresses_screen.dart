@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
+import '../widgets.dart';
 import '../models/address_model.dart';
 import '../services/db_service.dart';
 import '../services/auth_service.dart';
@@ -24,6 +25,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
   AddressListMode _mode = AddressListMode.manage;
   bool _resolved = false;
   bool _loading = true;
+  bool _loadError = false;
   List<AddressModel> _addresses = [];
 
   bool get _isSelect => _mode == AddressListMode.select;
@@ -42,10 +44,16 @@ class _AddressesScreenState extends State<AddressesScreen> {
   Future<void> _load() async {
     final uid = AuthService.currentUid;
     if (uid == null) {
-      setState(() { _addresses = []; _loading = false; });
+      setState(() {
+        _addresses = [];
+        _loading = false;
+      });
       return;
     }
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = false;
+    });
     try {
       var list = await DbService.getUserAddresses(uid);
       // Garantiza que siempre haya exactamente una predeterminada.
@@ -53,9 +61,19 @@ class _AddressesScreenState extends State<AddressesScreen> {
         await DbService.setDefaultAddress(uid, list.first.id);
         list = await DbService.getUserAddresses(uid);
       }
-      if (mounted) setState(() { _addresses = list; _loading = false; });
-    } catch (e) {
-      if (mounted) setState(() { _loading = false; });
+      if (mounted) {
+        setState(() {
+          _addresses = list;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadError = true;
+        });
+      }
     }
   }
 
@@ -91,18 +109,21 @@ class _AddressesScreenState extends State<AddressesScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar dirección'),
+        title: Text('Eliminar dirección'),
         content: Text('¿Eliminar "${a.street}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar',
-                style: TextStyle(color: AppColors.textMuted)),
+            child: Text(
+              'Cancelar',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Eliminar',
-                style: TextStyle(color: AppColors.danger)),
+            child: Text('Eliminar', style: TextStyle(color: AppColors.danger)),
           ),
         ],
       ),
@@ -119,21 +140,23 @@ class _AddressesScreenState extends State<AddressesScreen> {
 
   void _snack(String msg, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: error ? AppColors.danger : AppColors.secondary,
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: error ? AppColors.danger : AppColors.secondary,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.primary,
         onPressed: () => _openForm(),
-        child: const Icon(Icons.add, color: Colors.white),
+        child: Icon(Icons.add, color: Colors.white),
       ),
       body: Column(
         children: [
@@ -141,17 +164,33 @@ class _AddressesScreenState extends State<AddressesScreen> {
           _buildAppBar(),
           Expanded(
             child: _loading
-                ? const Center(
-                    child: CircularProgressIndicator(color: AppColors.primary))
+                ? Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        AppSkeleton(height: 104),
+                        SizedBox(height: 10),
+                        AppSkeleton(height: 104),
+                      ],
+                    ),
+                  )
+                : _loadError
+                ? AppStateView(
+                    icon: Icons.cloud_off_rounded,
+                    title: 'No pudimos cargar tus direcciones',
+                    message: 'Revisa tu conexión e inténtalo nuevamente.',
+                    actionLabel: 'Reintentar',
+                    onAction: _load,
+                  )
                 : _addresses.isEmpty
-                    ? _buildEmpty()
-                    : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 96),
-                        itemCount: _addresses.length,
-                        separatorBuilder: (context, i) =>
-                            const SizedBox(height: 10),
-                        itemBuilder: (context, i) => _buildCard(_addresses[i]),
-                      ),
+                ? _buildEmpty()
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 96),
+                    itemCount: _addresses.length,
+                    separatorBuilder: (context, i) =>
+                        const SizedBox(height: 10),
+                    itemBuilder: (context, i) => _buildCard(_addresses[i]),
+                  ),
           ),
         ],
       ),
@@ -159,40 +198,12 @@ class _AddressesScreenState extends State<AddressesScreen> {
   }
 
   Widget _buildEmpty() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.location_off_outlined,
-              size: 64, color: AppColors.border),
-          const SizedBox(height: 16),
-          const Text('No tienes direcciones guardadas',
-              style: TextStyle(
-                  fontSize: 16,
-                  color: AppColors.textMuted,
-                  fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          const Text('Agrega tu primera dirección de entrega',
-              style: TextStyle(fontSize: 13, color: AppColors.textSubtle)),
-          const SizedBox(height: 16),
-          GestureDetector(
-            onTap: () => _openForm(),
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Text('Agregar dirección',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700)),
-            ),
-          ),
-        ],
-      ),
+    return AppStateView(
+      icon: Icons.location_off_outlined,
+      title: 'No tienes direcciones guardadas',
+      message: 'Agrega tu primera dirección de entrega.',
+      actionLabel: 'Agregar dirección',
+      onAction: () => _openForm(),
     );
   }
 
@@ -200,12 +211,14 @@ class _AddressesScreenState extends State<AddressesScreen> {
     return GestureDetector(
       onTap: _isSelect ? () => Navigator.pop(context, a) : null,
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: a.isDefault ? AppColors.primary : AppColors.border,
+            color: a.isDefault
+                ? AppColors.primary
+                : Theme.of(context).colorScheme.outlineVariant,
             width: a.isDefault ? 1.5 : 1,
           ),
         ),
@@ -216,7 +229,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
                 onTap: () => _setDefault(a),
                 behavior: HitTestBehavior.opaque,
                 child: Padding(
-                  padding: const EdgeInsets.only(right: 12),
+                  padding: EdgeInsets.only(right: 12),
                   child: _RadioDot(selected: a.isDefault),
                 ),
               ),
@@ -224,13 +237,18 @@ class _AddressesScreenState extends State<AddressesScreen> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: a.isDefault ? AppColors.primaryTint : AppColors.bg,
+                color: a.isDefault
+                    ? Theme.of(context).colorScheme.primaryContainer
+                    : Theme.of(context).scaffoldBackgroundColor,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(_iconFor(a.label),
-                  size: 20,
-                  color:
-                      a.isDefault ? AppColors.primary : AppColors.textMuted),
+              child: Icon(
+                _iconFor(a.label),
+                size: 20,
+                color: a.isDefault
+                    ? AppColors.primary
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -240,48 +258,70 @@ class _AddressesScreenState extends State<AddressesScreen> {
                   Row(
                     children: [
                       Flexible(
-                        child: Text(a.label.isEmpty ? 'Dirección' : a.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w800)),
+                        child: Text(
+                          a.label.isEmpty ? 'Dirección' : a.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
                       if (a.isDefault) ...[
-                        const SizedBox(width: 6),
+                        SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: AppColors.primaryTint,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primaryContainer,
                             borderRadius: BorderRadius.circular(5),
                           ),
-                          child: const Text('Principal',
-                              style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.primary)),
+                          child: Text(
+                            'Principal',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
+                            ),
+                          ),
                         ),
                       ],
                     ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(a.street,
+                  SizedBox(height: 2),
+                  Text(
+                    a.street,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (a.reference != null && a.reference!.isNotEmpty)
+                    Text(
+                      a.reference!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 12.5, color: AppColors.textMuted)),
-                  if (a.reference != null && a.reference!.isNotEmpty)
-                    Text(a.reference!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 11.5, color: AppColors.textSubtle)),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                    ),
                 ],
               ),
             ),
             if (_isSelect)
-              const Icon(Icons.chevron_right,
-                  size: 20, color: AppColors.textSubtle)
+              Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: Theme.of(context).colorScheme.outline,
+              )
             else ...[
               _iconBtn(Icons.edit_outlined, () => _openForm(edit: a)),
               const SizedBox(width: 4),
@@ -298,24 +338,30 @@ class _AddressesScreenState extends State<AddressesScreen> {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Icon(icon,
-            size: 20,
-            color: danger ? AppColors.danger : AppColors.textMuted),
+        padding: EdgeInsets.all(4),
+        child: Icon(
+          icon,
+          size: 20,
+          color: danger
+              ? AppColors.danger
+              : Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }
 
   IconData _iconFor(String label) {
     final l = label.toLowerCase();
-    if (l.contains('trabajo') || l.contains('oficina')) return Icons.work_outline;
+    if (l.contains('trabajo') || l.contains('oficina')) {
+      return Icons.work_outline;
+    }
     if (l.contains('intersec')) return Icons.alt_route;
     return Icons.home_outlined;
   }
 
   Widget _buildAppBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Row(
         children: [
           GestureDetector(
@@ -324,18 +370,17 @@ class _AddressesScreenState extends State<AddressesScreen> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: AppColors.bg,
+                color: Theme.of(context).scaffoldBackgroundColor,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.chevron_left, size: 22),
+              child: Icon(Icons.chevron_left, size: 22),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               _isSelect ? 'Elegir dirección' : 'Mis direcciones',
-              style:
-                  const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
             ),
           ),
         ],
@@ -355,15 +400,17 @@ class _RadioDot extends StatelessWidget {
       height: 22,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: selected ? AppColors.primary : Colors.white,
+        color: selected
+            ? AppColors.primary
+            : Theme.of(context).colorScheme.surface,
         border: Border.all(
-          color: selected ? AppColors.primary : AppColors.border,
+          color: selected
+              ? AppColors.primary
+              : Theme.of(context).colorScheme.outlineVariant,
           width: 2,
         ),
       ),
-      child: selected
-          ? const Icon(Icons.check, size: 13, color: Colors.white)
-          : null,
+      child: selected ? Icon(Icons.check, size: 13, color: Colors.white) : null,
     );
   }
 }

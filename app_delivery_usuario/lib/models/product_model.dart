@@ -40,6 +40,11 @@ class ProductModel {
   /// o pegada como URL externa). Null/vacío = usar el asset local.
   final String? imageUrl;
 
+  /// Whether the customer must review selections before adding this product.
+  /// These are the only customization fields currently stored in Firestore.
+  bool get requiresCustomization =>
+      sizes.isNotEmpty || extras.isNotEmpty || cutlery.isNotEmpty;
+
   const ProductModel({
     required this.id,
     required this.storeId,
@@ -56,40 +61,43 @@ class ProductModel {
     this.imageUrl,
   });
 
-  factory ProductModel.fromMap(String id, String storeId, Map<String, dynamic> m) =>
-      ProductModel(
-        id: id,
-        storeId: storeId,
-        name: m['name'],
-        description: m['description'] ?? '',
-        price: (m['price'] as num).toDouble(),
-        tone: m['tone'] ?? 'warm',
-        badge: m['badge'],
-        category: m['category'] ?? 'Destacados',
-        isAvailable: m['isAvailable'] ?? true,
-        imageUrl: m['imageUrl'] ?? m['imagen_url'],
-        sizes: (m['sizes'] as List? ?? [])
-            .map((s) => ProductVariant.fromMap(Map<String, dynamic>.from(s)))
-            .toList(),
-        extras: (m['extras'] as List? ?? [])
-            .map((e) => ProductExtra.fromMap(Map<String, dynamic>.from(e)))
-            .toList(),
-        cutlery: (m['cutlery'] as List? ?? [])
-            .map((e) => ProductExtra.fromMap(Map<String, dynamic>.from(e)))
-            .toList(),
-      );
+  factory ProductModel.fromMap(
+    String id,
+    String storeId,
+    Map<String, dynamic> m,
+  ) => ProductModel(
+    id: id,
+    storeId: storeId,
+    name: m['name'],
+    description: m['description'] ?? '',
+    price: (m['price'] as num).toDouble(),
+    tone: m['tone'] ?? 'warm',
+    badge: m['badge'],
+    category: m['category'] ?? 'Destacados',
+    isAvailable: m['isAvailable'] ?? true,
+    imageUrl: m['imageUrl'] ?? m['imagen_url'],
+    sizes: (m['sizes'] as List? ?? [])
+        .map((s) => ProductVariant.fromMap(Map<String, dynamic>.from(s)))
+        .toList(),
+    extras: (m['extras'] as List? ?? [])
+        .map((e) => ProductExtra.fromMap(Map<String, dynamic>.from(e)))
+        .toList(),
+    cutlery: (m['cutlery'] as List? ?? [])
+        .map((e) => ProductExtra.fromMap(Map<String, dynamic>.from(e)))
+        .toList(),
+  );
 
   Map<String, dynamic> toMap() => {
-        'name': name,
-        'description': description,
-        'price': price,
-        'tone': tone,
-        'badge': badge,
-        'category': category,
-        'isAvailable': isAvailable,
-        if (imageUrl != null) 'imageUrl': imageUrl,
-        'sizes': sizes.map((s) => s.toMap()).toList(),
-        'extras': extras.map((e) => e.toMap()).toList(),
-        'cutlery': cutlery.map((e) => e.toMap()).toList(),
-      };
+    'name': name,
+    'description': description,
+    'price': price,
+    'tone': tone,
+    'badge': badge,
+    'category': category,
+    'isAvailable': isAvailable,
+    if (imageUrl != null) 'imageUrl': imageUrl,
+    'sizes': sizes.map((s) => s.toMap()).toList(),
+    'extras': extras.map((e) => e.toMap()).toList(),
+    'cutlery': cutlery.map((e) => e.toMap()).toList(),
+  };
 }

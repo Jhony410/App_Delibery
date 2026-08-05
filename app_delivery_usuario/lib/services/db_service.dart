@@ -12,15 +12,14 @@ class DbService {
 
   // ── Stores ────────────────────────────────────────────────
   static Future<List<StoreModel>> getStores({String? categorySlug}) async {
-    Query<Map<String, dynamic>> q =
-        _db.collection('stores').where('isOpen', isEqualTo: true);
+    Query<Map<String, dynamic>> q = _db
+        .collection('stores')
+        .where('isOpen', isEqualTo: true);
     if (categorySlug != null) {
       q = q.where('categorySlug', isEqualTo: categorySlug);
     }
     final snap = await q.get();
-    return snap.docs
-        .map((d) => StoreModel.fromMap(d.id, d.data()))
-        .toList();
+    return snap.docs.map((d) => StoreModel.fromMap(d.id, d.data())).toList();
   }
 
   static Future<StoreModel?> getStore(String storeId) async {
@@ -34,15 +33,19 @@ class DbService {
     final q = query.toLowerCase();
     return snap.docs
         .map((d) => StoreModel.fromMap(d.id, d.data()))
-        .where((s) =>
-            s.name.toLowerCase().contains(q) ||
-            s.category.toLowerCase().contains(q))
+        .where(
+          (s) =>
+              s.name.toLowerCase().contains(q) ||
+              s.category.toLowerCase().contains(q),
+        )
         .toList();
   }
 
   // ── Products ──────────────────────────────────────────────
   static Future<List<ProductModel>> getStoreProducts(
-      String storeId, {String? category}) async {
+    String storeId, {
+    String? category,
+  }) async {
     Query<Map<String, dynamic>> q = _db
         .collection('stores')
         .doc(storeId)
@@ -56,7 +59,9 @@ class DbService {
   }
 
   static Future<ProductModel?> getProduct(
-      String storeId, String productId) async {
+    String storeId,
+    String productId,
+  ) async {
     final doc = await _db
         .collection('stores')
         .doc(storeId)
@@ -69,11 +74,14 @@ class DbService {
 
   // ── Orders ────────────────────────────────────────────────
   static Future<String> createOrder(OrderModel order) async {
-    final ref = await _db.collection('orders').add(order.toMap());
-    await _db.collection('users').doc(order.userId).update({
+    final ref = _db.collection('orders').doc();
+    final batch = _db.batch();
+    batch.set(ref, order.toMap());
+    batch.update(_db.collection('users').doc(order.userId), {
       'totalOrders': FieldValue.increment(1),
       'totalSpent': FieldValue.increment(order.total),
     });
+    await batch.commit();
     return ref.id;
   }
 
@@ -86,13 +94,14 @@ class DbService {
     return snap.docs.map((d) => OrderModel.fromMap(d.id, d.data())).toList();
   }
 
-  static Stream<List<OrderModel>> streamUserOrders(String userId) =>
-      _db
-          .collection('orders')
-          .where('userId', isEqualTo: userId)
-          .orderBy('createdAt', descending: true)
-          .snapshots()
-          .map((s) => s.docs.map((d) => OrderModel.fromMap(d.id, d.data())).toList());
+  static Stream<List<OrderModel>> streamUserOrders(String userId) => _db
+      .collection('orders')
+      .where('userId', isEqualTo: userId)
+      .orderBy('createdAt', descending: true)
+      .snapshots()
+      .map(
+        (s) => s.docs.map((d) => OrderModel.fromMap(d.id, d.data())).toList(),
+      );
 
   static Future<OrderModel?> getOrder(String orderId) async {
     final doc = await _db.collection('orders').doc(orderId).get();
@@ -100,19 +109,31 @@ class DbService {
     return OrderModel.fromMap(doc.id, doc.data()!);
   }
 
-  static Stream<OrderModel?> streamOrder(String orderId) =>
-      _db.collection('orders').doc(orderId).snapshots().map(
-            (doc) => doc.exists
-                ? OrderModel.fromMap(doc.id, doc.data()!)
-                : null,
-          );
+  static Stream<OrderModel?> streamOrder(String orderId) => _db
+      .collection('orders')
+      .doc(orderId)
+      .snapshots()
+      .map(
+        (doc) => doc.exists ? OrderModel.fromMap(doc.id, doc.data()!) : null,
+      );
 
   static Future<void> updateOrderStatus(String orderId, String status) =>
       _db.collection('orders').doc(orderId).update({'status': status});
 
-  /// Flags an order as rated so the "Calificar" action is only offered once.
-  static Future<void> markOrderRated(String orderId) =>
-      _db.collection('orders').doc(orderId).update({'rated': true});
+  /// Persists the customer's feedback and flags the order as rated so the
+  /// action is only offered once. These additive fields do not alter dispatch.
+  static Future<void> markOrderRated(
+    String orderId, {
+    required int storeRating,
+    required int courierRating,
+    String? comment,
+  }) => _db.collection('orders').doc(orderId).update({
+    'rated': true,
+    'storeRating': storeRating,
+    'courierRating': courierRating,
+    if (comment != null && comment.isNotEmpty) 'ratingComment': comment,
+    'ratedAt': FieldValue.serverTimestamp(),
+  });
 
   // ── Couriers (read-only; owned by the courier app) ────────
   /// Live view of the courier assigned to an order, so the tracking screen can
@@ -133,9 +154,11 @@ class DbService {
       .collection('courierLocations')
       .doc(courierId)
       .snapshots()
-      .map((d) => (d.exists && d.data()?['lat'] != null)
-          ? CourierLocation.fromMap(d.data()!)
-          : null);
+      .map(
+        (d) => (d.exists && d.data()?['lat'] != null)
+            ? CourierLocation.fromMap(d.data()!)
+            : null,
+      );
 
   // ── Users ─────────────────────────────────────────────────
   static Future<UserModel?> getUser(String uid) async {
@@ -156,8 +179,11 @@ class DbService {
 
   // ── Favorites ─────────────────────────────────────────────
   static Future<List<FavoriteModel>> getUserFavorites(String uid) async {
-    final snap =
-        await _db.collection('users').doc(uid).collection('favorites').get();
+    final snap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('favorites')
+        .get();
     return snap.docs.map((d) => FavoriteModel.fromMap(d.id, d.data())).toList();
   }
 
@@ -166,8 +192,10 @@ class DbService {
       .doc(uid)
       .collection('favorites')
       .snapshots()
-      .map((s) =>
-          s.docs.map((d) => FavoriteModel.fromMap(d.id, d.data())).toList());
+      .map(
+        (s) =>
+            s.docs.map((d) => FavoriteModel.fromMap(d.id, d.data())).toList(),
+      );
 
   static Future<bool> isFavorite(String uid, String storeId) async {
     final doc = await _db
@@ -183,7 +211,10 @@ class DbService {
   /// favourite state (true = now a favourite). The doc id is the storeId so the
   /// operation is idempotent.
   static Future<bool> toggleFavorite(
-      String uid, String storeId, String storeName) async {
+    String uid,
+    String storeId,
+    String storeName,
+  ) async {
     final ref = _db
         .collection('users')
         .doc(uid)
@@ -195,7 +226,8 @@ class DbService {
       return false;
     }
     await ref.set(
-        FavoriteModel(storeId: storeId, storeName: storeName).toMap());
+      FavoriteModel(storeId: storeId, storeName: storeName).toMap(),
+    );
     return true;
   }
 
@@ -207,9 +239,11 @@ class DbService {
           .collection('notifications')
           .orderBy('createdAt', descending: true)
           .snapshots()
-          .map((s) => s.docs
-              .map((d) => NotificationModel.fromMap(d.id, d.data()))
-              .toList());
+          .map(
+            (s) => s.docs
+                .map((d) => NotificationModel.fromMap(d.id, d.data()))
+                .toList(),
+          );
 
   static Stream<int> countUnreadNotifications(String uid) => _db
       .collection('users')
@@ -234,10 +268,19 @@ class DbService {
         .doc(uid)
         .collection('addresses')
         .get();
-    return snap.docs
-        .map((d) => AddressModel.fromMap(d.id, d.data()))
-        .toList();
+    return snap.docs.map((d) => AddressModel.fromMap(d.id, d.data())).toList();
   }
+
+  static Stream<List<AddressModel>> streamUserAddresses(String uid) => _db
+      .collection('users')
+      .doc(uid)
+      .collection('addresses')
+      .snapshots()
+      .map(
+        (snapshot) => snapshot.docs
+            .map((doc) => AddressModel.fromMap(doc.id, doc.data()))
+            .toList(),
+      );
 
   /// The address marked as default, or the first saved one if none is marked.
   /// Returns null when the user has no saved addresses.
@@ -250,17 +293,22 @@ class DbService {
     return list.first;
   }
 
-  static Future<void> addAddress(String uid, AddressModel address) =>
-      _db.collection('users').doc(uid).collection('addresses').add(address.toMap());
+  static Future<void> addAddress(String uid, AddressModel address) => _db
+      .collection('users')
+      .doc(uid)
+      .collection('addresses')
+      .add(address.toMap());
 
   static Future<void> updateAddress(
-          String uid, String addressId, AddressModel address) =>
-      _db
-          .collection('users')
-          .doc(uid)
-          .collection('addresses')
-          .doc(addressId)
-          .update(address.toMap());
+    String uid,
+    String addressId,
+    AddressModel address,
+  ) => _db
+      .collection('users')
+      .doc(uid)
+      .collection('addresses')
+      .doc(addressId)
+      .update(address.toMap());
 
   /// Marks [addressId] as the default one, clearing the flag on every other
   /// saved address in a single atomic batch so only one stays true.
@@ -274,13 +322,12 @@ class DbService {
     await batch.commit();
   }
 
-  static Future<void> deleteAddress(String uid, String addressId) =>
-      _db
-          .collection('users')
-          .doc(uid)
-          .collection('addresses')
-          .doc(addressId)
-          .delete();
+  static Future<void> deleteAddress(String uid, String addressId) => _db
+      .collection('users')
+      .doc(uid)
+      .collection('addresses')
+      .doc(addressId)
+      .delete();
 }
 
 /// The courier's last published position, read from `courierLocations/{uid}`.
@@ -300,12 +347,12 @@ class CourierLocation {
   });
 
   factory CourierLocation.fromMap(Map<String, dynamic> m) => CourierLocation(
-        lat: (m['lat'] as num).toDouble(),
-        lng: (m['lng'] as num).toDouble(),
-        heading: (m['heading'] as num?)?.toDouble(),
-        updatedAt: (m['updatedAt'] as Timestamp?)?.toDate(),
-        activeOrderId: m['activeOrderId'] as String?,
-      );
+    lat: (m['lat'] as num).toDouble(),
+    lng: (m['lng'] as num).toDouble(),
+    heading: (m['heading'] as num?)?.toDouble(),
+    updatedAt: (m['updatedAt'] as Timestamp?)?.toDate(),
+    activeOrderId: m['activeOrderId'] as String?,
+  );
 }
 
 /// Read-only projection of a `couriers/{uid}` doc — only the fields the customer
@@ -329,7 +376,8 @@ class CourierInfo {
     required this.totalDeliveries,
   });
 
-  factory CourierInfo.fromMap(String uid, Map<String, dynamic> m) => CourierInfo(
+  factory CourierInfo.fromMap(String uid, Map<String, dynamic> m) =>
+      CourierInfo(
         uid: uid,
         name: m['name'] ?? '',
         phone: m['phone'] ?? '',
